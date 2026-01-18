@@ -268,10 +268,11 @@ const totalsByClass = useMemo(() => {
     totals[cls] += seriesPoints[s] ?? 0;
   }
 
-  // ② 未使用Ptを各分類に加算
-  for (const cls of Object.keys(unusedPoints || {})) {
+  // ② 未使用Ptを各分類に加算（型安全）
+  for (const cls of UNUSED_CLASSES) {
     totals[cls] += unusedPoints[cls] ?? 0;
   }
+
 
   // ③ 総合Pt = 全分類の合計
   let grandTotal = 0;
