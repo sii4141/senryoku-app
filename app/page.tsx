@@ -190,7 +190,8 @@ export default function Home() {
     };
 
     tick();
-    const id = setInterval(tick, 60_000);
+    const id = setInterval(tick, 60 * 60 * 1000); // 1時間
+
 
     return () => {
       alive = false;
