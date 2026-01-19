@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import initialData from "@/src/data/data.json";
 import {
   ShipType,
@@ -37,11 +37,38 @@ type UnusedClass = (typeof UNUSED_CLASSES)[number];
 // ✅ 未使用Ptも「未入力」を許可する（空欄表示したいので）
 type UnusedPointsMap = Partial<Record<UnusedClass, number>>;
 type UnusedPointsByUserMap = Record<string, UnusedPointsMap>;
+
+type ScrollState = {
+  winY: number;
+  seriesY: number;
+  unusedY: number;
+  ownedY: number;
+};
+
+function loadScrollState(): ScrollState | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_SCROLL_STATE);
+    if (!raw) return null;
+    return JSON.parse(raw) as ScrollState;
+  } catch {
+    return null;
+  }
+}
+
+function saveScrollState(state: ScrollState) {
+  try {
+    localStorage.setItem(STORAGE_KEY_SCROLL_STATE, JSON.stringify(state));
+  } catch {}
+}
+
+
 type UiState = {
   selectedUser: string;
   userQuery: string;
   shipType: ShipType;
   shipQuery: string;
+  seriesDraftByUser: Record<string, Record<string, string>>;
+  unusedDraftByUser: Record<string, Record<string, string>>;
 };
 
 function loadUiState(): UiState | null {
@@ -54,11 +81,13 @@ function loadUiState(): UiState | null {
   }
 }
 
-function saveUiState(state: UiState) {
-  try {
-    localStorage.setItem(STORAGE_KEY_UI_STATE, JSON.stringify(state));
-  } catch {}
+function saveUiState(partial: Partial<UiState>) {
+  const prev = loadUiState(); // localStorage から読む関数
+  const next = { ...prev, ...partial };
+  localStorage.setItem("ui_state", JSON.stringify(next));
 }
+
+
 
 
 // --------------------
@@ -67,6 +96,7 @@ const STORAGE_KEY_SERIES_POINTS_BY_USER = "senryoku_series_points_by_user_local_
 const STORAGE_KEY_UNUSED_POINTS_BY_USER = "senryoku_unused_points_by_user_local_v1";
 const STORAGE_KEY_SELECTED_USER = "senryoku_selected_user_v1";
 const STORAGE_KEY_UI_STATE = "senryoku_ui_state_v1";
+const STORAGE_KEY_SCROLL_STATE = "senryoku_scroll_state_v1";
 
 
 function clampInt(v: string) {
@@ -101,10 +131,14 @@ export default function Home() {
 
   const [selectedUser, setSelectedUser] = useState<string>("");
   const [newUserName, setNewUserName] = useState<string>("");
-
+  
   const [shipType, setShipType] = useState<ShipType>("全艦船");
   const [userQuery, setUserQuery] = useState<string>("");
   const [shipQuery, setShipQuery] = useState<string>("");
+
+  const refSeriesBox = useRef<HTMLDivElement | null>(null);
+  const refUnusedBox = useRef<HTMLDivElement | null>(null);
+  const refOwnedBox = useRef<HTMLDivElement | null>(null);
 
   // ---------- GASへ送る（Nextの /api/gas 経由：CORS回避） ----------
   async function gasPost(payload: Record<string, any>) {
@@ -191,12 +225,15 @@ export default function Home() {
     
     }
     const ui = loadUiState();
-      if (ui) {
-        setSelectedUser(ui.selectedUser || "");
-        setUserQuery(ui.userQuery || "");
-        setShipType(ui.shipType || "全艦船");
-        setShipQuery(ui.shipQuery || "");
-      }
+    if (ui) {
+      setSelectedUser(ui.selectedUser || "");
+      setUserQuery(ui.userQuery || "");
+      setShipType(ui.shipType || "全艦船");
+      setShipQuery(ui.shipQuery || "");
+      setSeriesDraftByUser(ui.seriesDraftByUser || {});
+      setUnusedDraftByUser(ui.unusedDraftByUser || {});
+    }
+
 
   }, []);
   useEffect(() => {
@@ -212,8 +249,93 @@ export default function Home() {
       userQuery,
       shipType,
       shipQuery,
+      seriesDraftByUser,
+      unusedDraftByUser,
     });
-  }, [selectedUser, userQuery, shipType, shipQuery]);
+  }, [
+    selectedUser,
+    userQuery,
+    shipType,
+    shipQuery,
+    seriesDraftByUser,
+    unusedDraftByUser,
+  ]);
+  useEffect(() => {
+    const handler = () => {
+      saveUiState({
+        selectedUser,
+        userQuery,
+        shipType,
+        shipQuery,
+        seriesDraftByUser,
+        unusedDraftByUser,
+      });
+    };
+    window.addEventListener("pagehide", handler);
+    document.addEventListener("visibilitychange", handler);
+    return () => {
+      window.removeEventListener("pagehide", handler);
+      document.removeEventListener("visibilitychange", handler);
+    };
+  }, [selectedUser, userQuery, shipType, shipQuery, seriesDraftByUser, unusedDraftByUser]);
+
+  useEffect(() => {
+    let raf = 0;
+
+    const write = () => {
+      raf = 0;
+      saveScrollState({
+        winY: window.scrollY || 0,
+        seriesY: refSeriesBox.current?.scrollTop || 0,
+        unusedY: refUnusedBox.current?.scrollTop || 0,
+        ownedY: refOwnedBox.current?.scrollTop || 0,
+      });
+    };
+
+    const scheduleWrite = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(write);
+    };
+
+    window.addEventListener("scroll", scheduleWrite, { passive: true });
+
+    const seriesEl = refSeriesBox.current;
+    const unusedEl = refUnusedBox.current;
+    const ownedEl = refOwnedBox.current;
+
+    seriesEl?.addEventListener("scroll", scheduleWrite, { passive: true });
+    unusedEl?.addEventListener("scroll", scheduleWrite, { passive: true });
+    ownedEl?.addEventListener("scroll", scheduleWrite, { passive: true });
+
+    // 念のため：画面離脱時も保存
+    const onHide = () => scheduleWrite();
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", onHide);
+
+    return () => {
+      window.removeEventListener("scroll", scheduleWrite);
+      seriesEl?.removeEventListener("scroll", scheduleWrite);
+      unusedEl?.removeEventListener("scroll", scheduleWrite);
+      ownedEl?.removeEventListener("scroll", scheduleWrite);
+      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onHide);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+  useEffect(() => {
+    const st = loadScrollState();
+    if (!st) return;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.scrollTo(0, st.winY || 0);
+        if (refSeriesBox.current) refSeriesBox.current.scrollTop = st.seriesY || 0;
+        if (refUnusedBox.current) refUnusedBox.current.scrollTop = st.unusedY || 0;
+        if (refOwnedBox.current) refOwnedBox.current.scrollTop = st.ownedY || 0;
+      });
+    });
+  }, []);
+
   useEffect(() => {
     const handler = () => {
       saveUiState({ selectedUser, userQuery, shipType, shipQuery });
@@ -686,7 +808,7 @@ export default function Home() {
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 220, overflow: "auto" }}>
+            <div ref={refSeriesBox}style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 220, overflow: "auto" }}>
               {SERIES_NAMES.map((s) => {
                 const saved = seriesPointsByUser[selectedUser]?.[s]; // number | undefined
                 const draft = seriesDraftByUser[selectedUser]?.[s];  // string | undefined
@@ -803,7 +925,7 @@ export default function Home() {
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 220, overflow: "auto" }}>
+            <div ref={refUnusedBox}style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 220, overflow: "auto" }}>
               {UNUSED_CLASSES.map((cls) => {
                 const saved = unusedPointsByUser[selectedUser]?.[cls]; // number | undefined
                 const draft = unusedDraftByUser[selectedUser]?.[cls];  // string | undefined
@@ -919,7 +1041,7 @@ export default function Home() {
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
           ) : (
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, maxHeight: 420, overflow: "auto" }}>
+            <div ref={refOwnedBox}style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, maxHeight: 420, overflow: "auto" }}>
               {filteredCatalog.map((it, idx) => {
                 const owned = isOwned(selectedUser, it.name);
                 const cls = classifyByName(it.name);
@@ -965,6 +1087,20 @@ export default function Home() {
           ※ スプレッドシートからアプリ側への反映は 1時間に1回です（起動時は即時1回）。<br />
         </div>
       </div>
+      {/* バージョン表示 */}
+      <div
+        style={{
+          position: "fixed",
+          right: 8,
+          bottom: 6,
+          fontSize: 11,
+          color: "#6b7280",
+          userSelect: "none",
+        }}
+      >
+        v1.1
+</div>
+
     </main>
   );
 }
