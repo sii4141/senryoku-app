@@ -416,7 +416,7 @@ export default function Home() {
 
         {/* 新規ユーザー作成 */}
         <div style={{ marginBottom: 12, border: "1px solid #e5e7eb", borderRadius: 12, padding: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 8 }}>新規ユーザー作成</div>
+          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 8 }}>新しく記入する方はこちらから入力</div>
           <div style={{ display: "flex", gap: 8 }}>
             <input
               value={newUserName}
@@ -456,7 +456,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ユーザー検索（プルダウン） */}
+        {/* ユーザー検索 */}
         <div style={{ marginBottom: 12 }}>
           <label style={{ fontSize: 12, color: "#374151" }}>ユーザー検索（プルダウン）</label>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
@@ -530,29 +530,39 @@ export default function Home() {
                   >
                     {name}
                   </button>
-
-                  <button
-                    onClick={() => {
-                      const ok = confirm(`ユーザー「${name}」を削除しますか？（所持とPtも消えます）`);
-                      if (ok) deleteUser(name);
-                    }}
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #ef4444",
-                      background: "#fee2e2",
-                      color: "#991b1b",
-                      fontWeight: "bold",
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    削除
-                  </button>
                 </div>
               );
             })}
           </div>
+        </div>
+        {/* ユーザー削除（まとめて） */}
+        <div style={{ marginTop: 12, border: "1px solid #fee2e2", borderRadius: 12, padding: 10, background: "#fff1f2" }}>
+          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 8, color: "#991b1b" }}>ユーザー削除</div>
+
+          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>
+            ※ 選択中ユーザーを削除します（所持・Pt・未使用Ptも消えます）
+          </div>
+
+          <button
+            disabled={!selectedUser}
+            onClick={() => {
+              if (!selectedUser) return;
+              const ok = confirm(`ユーザー「${selectedUser}」を削除しますか？（所持・Pt・未使用Ptも消えます）`);
+              if (ok) deleteUser(selectedUser);
+            }}
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid #ef4444",
+              background: selectedUser ? "#fee2e2" : "#f3f4f6",
+              color: selectedUser ? "#991b1b" : "#9ca3af",
+              fontWeight: "bold",
+              cursor: selectedUser ? "pointer" : "not-allowed",
+            }}
+          >
+            選択中ユーザーを削除
+          </button>
         </div>
 
         {/* 合計 */}
@@ -561,7 +571,7 @@ export default function Home() {
             <div style={{ fontSize: 14, color: "#6b7280" }}>ユーザーを選択してください</div>
           ) : (
             <div style={{ fontSize: 14 }}>
-              選択中：<b>{selectedUser}</b> ／ 所持 {(users[selectedUser] || []).length} 件
+              選択中：<b>{selectedUser}</b>
               <div style={{ marginTop: 8, fontSize: 13, color: "#111827" }}>
                 <b>分類ごとの合計Pt</b>（未使用Ptを加算 / 未分類は総合Pt）
               </div>
@@ -606,9 +616,9 @@ export default function Home() {
           </select>
         </div>
 
-        {/* Pt設定（シリーズごと） */}
+        {/* Pt設定（設計図ごと） */}
         <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>Pt設定（シリーズごと）</div>
+          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>技術Ptの数を入力（設計図ごと）</div>
 
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
@@ -725,7 +735,7 @@ export default function Home() {
 
         {/* 未使用Pt（艦種ごと） */}
         <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>未使用Pt（艦種ごと）</div>
+          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>未使用Ptの入力（艦種ごと）</div>
 
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
@@ -841,7 +851,7 @@ export default function Home() {
 
         {/* 所持 */}
         <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>所持入力（◯）</div>
+          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>所持モデル・モジュール入力（タップで◯を入力）</div>
 
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
@@ -889,8 +899,7 @@ export default function Home() {
         </div>
 
         <div style={{ marginTop: 12, fontSize: 12, color: "#6b7280" }}>
-          ※ ポーリングは 1時間に1回です（起動時は即時1回）。<br />
-          ※ 「未分類」は画面上は「総合Pt」として表示し、中身は全分類合計です。
+          ※ スプレッドシートからアプリ側への反映は 1時間に1回です（起動時は即時1回）。<br />
         </div>
       </div>
     </main>
