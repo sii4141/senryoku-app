@@ -606,181 +606,236 @@ export default function Home() {
           </select>
         </div>
 
-        {SERIES_NAMES.map((s) => {
-          const saved = seriesPointsByUser[selectedUser]?.[s]; // number | undefined
-          const draft = seriesDraftByUser[selectedUser]?.[s];
+        {/* Pt設定（シリーズごと） */}
+        <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, marginBottom: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>Pt設定（シリーズごと）</div>
 
-          const displayValue = draft !== undefined
-            ? draft
-            : (saved === undefined ? "" : String(saved));
+          {!selectedUser ? (
+            <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 220, overflow: "auto" }}>
+              {SERIES_NAMES.map((s) => {
+                const saved = seriesPointsByUser[selectedUser]?.[s]; // number | undefined
+                const draft = seriesDraftByUser[selectedUser]?.[s];  // string | undefined
 
-          return (
-            <div key={s} style={{ display: "flex", justifyContent: "space-between", gap: 8, border: "1px solid #f3f4f6", borderRadius: 10, padding: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{s}</div>
+                const displayValue =
+                  draft !== undefined ? draft : (saved === undefined ? "" : String(saved));
 
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1}
-                value={displayValue}
-                onChange={(e) => {
-                  if (!selectedUser) return;
-                  const raw = e.target.value; // 空欄もそのまま持つ
-                  setSeriesDraftByUser((prev) => ({
-                    ...prev,
-                    [selectedUser]: { ...(prev[selectedUser] || {}), [s]: raw },
-                  }));
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") (e.target as HTMLInputElement).blur(); // Enterで確定
-                }}
-                onBlur={async () => {
-                  if (!selectedUser) return;
+                return (
+                  <div
+                    key={s}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      border: "1px solid #f3f4f6",
+                      borderRadius: 10,
+                      padding: 8,
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{s}</div>
 
-                  const raw = seriesDraftByUser[selectedUser]?.[s];
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      step={1}
+                      value={displayValue}
+                      onChange={(e) => {
+                        if (!selectedUser) return;
+                        const raw = e.target.value; // 空欄もそのまま保持
+                        setSeriesDraftByUser((prev) => ({
+                          ...prev,
+                          [selectedUser]: { ...(prev[selectedUser] || {}), [s]: raw },
+                        }));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur(); // Enterで確定
+                      }}
+                      onBlur={async () => {
+                        if (!selectedUser) return;
 
-                  // draftが無い = 触ってない
-                  if (raw === undefined) return;
+                        const raw = seriesDraftByUser[selectedUser]?.[s];
+                        if (raw === undefined) return; // 触ってない
 
-                  // 空欄ならクリア（null送信）
-                  if (raw.trim() === "") {
-                    setSeriesPointsByUser((prev) => ({
-                      ...prev,
-                      [selectedUser]: { ...(prev[selectedUser] || {}), [s]: undefined },
-                    }));
-                    setSeriesDraftByUser((prev) => {
-                      const next = { ...prev };
-                      const u = { ...(next[selectedUser] || {}) };
-                      delete u[s];
-                      next[selectedUser] = u;
-                      return next;
-                    });
+                        // 空欄 → クリア（GASもクリア）
+                        if (raw.trim() === "") {
+                          setSeriesPointsByUser((prev) => ({
+                            ...prev,
+                            [selectedUser]: { ...(prev[selectedUser] || {}), [s]: undefined },
+                          }));
 
-                    try {
-                      await apiUpsertPt(selectedUser, s, null);
-                    } catch (err) {
-                      console.error("GAS同期失敗(pt)", err);
-                    }
-                    return;
-                  }
+                          // draft消す
+                          setSeriesDraftByUser((prev) => {
+                            const next = { ...prev };
+                            const u = { ...(next[selectedUser] || {}) };
+                            delete u[s];
+                            next[selectedUser] = u;
+                            return next;
+                          });
 
-                  // 数値確定
-                  const val = clampInt(raw);
+                          try {
+                            await apiUpsertPt(selectedUser, s, null); // ← nullでclear（api側対応必須）
+                          } catch (err) {
+                            console.error("GAS同期失敗(pt)", err);
+                          }
+                          return;
+                        }
 
-                  setSeriesPointsByUser((prev) => ({
-                    ...prev,
-                    [selectedUser]: { ...(prev[selectedUser] || {}), [s]: val },
-                  }));
+                        const val = clampInt(raw);
 
-                  // draft消す
-                  setSeriesDraftByUser((prev) => {
-                    const next = { ...prev };
-                    const u = { ...(next[selectedUser] || {}) };
-                    delete u[s];
-                    next[selectedUser] = u;
-                    return next;
-                  });
+                        setSeriesPointsByUser((prev) => ({
+                          ...prev,
+                          [selectedUser]: { ...(prev[selectedUser] || {}), [s]: val },
+                        }));
 
-                  try {
-                    await apiUpsertPt(selectedUser, s, val);
-                  } catch (err) {
-                    console.error("GAS同期失敗(pt)", err);
-                  }
-                }}
-                style={{ width: 90, padding: 8, border: "1px solid #d1d5db", borderRadius: 10, textAlign: "right" }}
-              />
+                        // draft消す
+                        setSeriesDraftByUser((prev) => {
+                          const next = { ...prev };
+                          const u = { ...(next[selectedUser] || {}) };
+                          delete u[s];
+                          next[selectedUser] = u;
+                          return next;
+                        });
+
+                        try {
+                          await apiUpsertPt(selectedUser, s, val);
+                        } catch (err) {
+                          console.error("GAS同期失敗(pt)", err);
+                        }
+                      }}
+                      style={{
+                        width: 90,
+                        padding: 8,
+                        border: "1px solid #d1d5db",
+                        borderRadius: 10,
+                        textAlign: "right",
+                      }}
+                    />
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          )}
+        </div>
 
 
 
 
-        {UNUSED_CLASSES.map((cls) => {
-          const saved = unusedPointsByUser[selectedUser]?.[cls]; // number | undefined（あなたの実装次第）
-          const draft = unusedDraftByUser[selectedUser]?.[cls];
 
-          const displayValue = draft !== undefined
-            ? draft
-            : (saved === undefined ? "" : String(saved));
+        {/* 未使用Pt（艦種ごと） */}
+        <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, marginBottom: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>未使用Pt（艦種ごと）</div>
 
-          return (
-            <div key={cls} style={{ display: "flex", justifyContent: "space-between", gap: 8, border: "1px solid #f3f4f6", borderRadius: 10, padding: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{cls}</div>
+          {!selectedUser ? (
+            <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 220, overflow: "auto" }}>
+              {UNUSED_CLASSES.map((cls) => {
+                const saved = unusedPointsByUser[selectedUser]?.[cls]; // number | undefined
+                const draft = unusedDraftByUser[selectedUser]?.[cls];  // string | undefined
 
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1}
-                value={displayValue}
-                onChange={(e) => {
-                  if (!selectedUser) return;
-                  const raw = e.target.value;
-                  setUnusedDraftByUser((prev) => ({
-                    ...prev,
-                    [selectedUser]: { ...(prev[selectedUser] || {}), [cls]: raw },
-                  }));
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                }}
-                onBlur={async () => {
-                  if (!selectedUser) return;
+                const displayValue =
+                  draft !== undefined ? draft : (saved === undefined ? "" : String(saved));
 
-                  const raw = unusedDraftByUser[selectedUser]?.[cls];
-                  if (raw === undefined) return;
+                return (
+                  <div
+                    key={cls}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      border: "1px solid #f3f4f6",
+                      borderRadius: 10,
+                      padding: 8,
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{cls}</div>
 
-                  if (raw.trim() === "") {
-                    // 空欄にしたい（GAS側もclear）
-                    setUnusedPointsByUser((prev) => ({
-                      ...prev,
-                      [selectedUser]: { ...(prev[selectedUser] || {}), [cls]: undefined as any },
-                    }));
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      step={1}
+                      value={displayValue}
+                      onChange={(e) => {
+                        if (!selectedUser) return;
+                        const raw = e.target.value; // 空欄も保持
+                        setUnusedDraftByUser((prev) => ({
+                          ...prev,
+                          [selectedUser]: { ...(prev[selectedUser] || {}), [cls]: raw },
+                        }));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      }}
+                      onBlur={async () => {
+                        if (!selectedUser) return;
 
-                    setUnusedDraftByUser((prev) => {
-                      const next = { ...prev };
-                      const u = { ...(next[selectedUser] || {}) };
-                      delete u[cls];
-                      next[selectedUser] = u;
-                      return next;
-                    });
+                        const raw = unusedDraftByUser[selectedUser]?.[cls];
+                        if (raw === undefined) return; // 触ってない
 
-                    try {
-                      await apiUpsertUnusedPt(selectedUser, cls, null); // ← api側を null 対応にする（後述）
-                    } catch (err) {
-                      console.error("GAS同期失敗(unused)", err);
-                    }
-                    return;
-                  }
+                        // 空欄 → クリア（GASもクリア）
+                        if (raw.trim() === "") {
+                          setUnusedPointsByUser((prev) => ({
+                            ...prev,
+                            [selectedUser]: { ...(prev[selectedUser] || {}), [cls]: undefined as any },
+                          }));
 
-                  const val = clampInt(raw);
+                          // draft消す
+                          setUnusedDraftByUser((prev) => {
+                            const next = { ...prev };
+                            const u = { ...(next[selectedUser] || {}) };
+                            delete u[cls];
+                            next[selectedUser] = u;
+                            return next;
+                          });
 
-                  setUnusedPointsByUser((prev) => ({
-                    ...prev,
-                    [selectedUser]: { ...(prev[selectedUser] || {}), [cls]: val as any },
-                  }));
+                          try {
+                            await apiUpsertUnusedPt(selectedUser, cls, null); // ← nullでclear（api側対応必須）
+                          } catch (err) {
+                            console.error("GAS同期失敗(unused)", err);
+                          }
+                          return;
+                        }
 
-                  setUnusedDraftByUser((prev) => {
-                    const next = { ...prev };
-                    const u = { ...(next[selectedUser] || {}) };
-                    delete u[cls];
-                    next[selectedUser] = u;
-                    return next;
-                  });
+                        const val = clampInt(raw);
 
-                  try {
-                    await apiUpsertUnusedPt(selectedUser, cls, val);
-                  } catch (err) {
-                    console.error("GAS同期失敗(unused)", err);
-                  }
-                }}
-                style={{ width: 90, padding: 8, border: "1px solid #d1d5db", borderRadius: 10, textAlign: "right" }}
-              />
+                        setUnusedPointsByUser((prev) => ({
+                          ...prev,
+                          [selectedUser]: { ...(prev[selectedUser] || {}), [cls]: val as any },
+                        }));
+
+                        // draft消す
+                        setUnusedDraftByUser((prev) => {
+                          const next = { ...prev };
+                          const u = { ...(next[selectedUser] || {}) };
+                          delete u[cls];
+                          next[selectedUser] = u;
+                          return next;
+                        });
+
+                        try {
+                          await apiUpsertUnusedPt(selectedUser, cls, val);
+                        } catch (err) {
+                          console.error("GAS同期失敗(unused)", err);
+                        }
+                      }}
+                      style={{
+                        width: 90,
+                        padding: 8,
+                        border: "1px solid #d1d5db",
+                        borderRadius: 10,
+                        textAlign: "right",
+                      }}
+                    />
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          )}
+        </div>
+
 
 
 
