@@ -37,12 +37,37 @@ type UnusedClass = (typeof UNUSED_CLASSES)[number];
 // ✅ 未使用Ptも「未入力」を許可する（空欄表示したいので）
 type UnusedPointsMap = Partial<Record<UnusedClass, number>>;
 type UnusedPointsByUserMap = Record<string, UnusedPointsMap>;
+type UiState = {
+  selectedUser: string;
+  userQuery: string;
+  shipType: ShipType;
+  shipQuery: string;
+};
+
+function loadUiState(): UiState | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_UI_STATE);
+    if (!raw) return null;
+    return JSON.parse(raw) as UiState;
+  } catch {
+    return null;
+  }
+}
+
+function saveUiState(state: UiState) {
+  try {
+    localStorage.setItem(STORAGE_KEY_UI_STATE, JSON.stringify(state));
+  } catch {}
+}
 
 
 // --------------------
 const STORAGE_KEY_USERS = "senryoku_users_local_v1";
 const STORAGE_KEY_SERIES_POINTS_BY_USER = "senryoku_series_points_by_user_local_v1";
 const STORAGE_KEY_UNUSED_POINTS_BY_USER = "senryoku_unused_points_by_user_local_v1";
+const STORAGE_KEY_SELECTED_USER = "senryoku_selected_user_v1";
+const STORAGE_KEY_UI_STATE = "senryoku_ui_state_v1";
+
 
 function clampInt(v: string) {
   const n = Math.floor(Number(v));
@@ -156,12 +181,50 @@ export default function Home() {
       setUsers(u || {});
       setSeriesPointsByUser(p || {});
       setUnusedPointsByUser(un || {});
+       // ✅ 追加：選択ユーザー復元
+      const savedSelected = localStorage.getItem(STORAGE_KEY_SELECTED_USER);
+      if (savedSelected) setSelectedUser(savedSelected);
     } catch {
       setUsers(((initialData as any).users || {}) as UsersMap);
       setSeriesPointsByUser({});
       setUnusedPointsByUser({});
+    
     }
+    const ui = loadUiState();
+      if (ui) {
+        setSelectedUser(ui.selectedUser || "");
+        setUserQuery(ui.userQuery || "");
+        setShipType(ui.shipType || "全艦船");
+        setShipQuery(ui.shipQuery || "");
+      }
+
   }, []);
+  useEffect(() => {
+    if (selectedUser) {
+      localStorage.setItem(STORAGE_KEY_SELECTED_USER, selectedUser);
+    } else {
+      localStorage.removeItem(STORAGE_KEY_SELECTED_USER);
+    }
+  }, [selectedUser]);
+  useEffect(() => {
+    saveUiState({
+      selectedUser,
+      userQuery,
+      shipType,
+      shipQuery,
+    });
+  }, [selectedUser, userQuery, shipType, shipQuery]);
+  useEffect(() => {
+    const handler = () => {
+      saveUiState({ selectedUser, userQuery, shipType, shipQuery });
+    };
+    window.addEventListener("pagehide", handler);
+    document.addEventListener("visibilitychange", handler);
+    return () => {
+      window.removeEventListener("pagehide", handler);
+      document.removeEventListener("visibilitychange", handler);
+    };
+  }, [selectedUser, userQuery, shipType, shipQuery]);
 
   // ---------- 1時間ポーリング：スプシ → アプリ反映 ----------
   useEffect(() => {
