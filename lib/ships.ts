@@ -202,7 +202,7 @@ export const MASTER_ORDER: string[] = [
 
   // シリーズ（大型艦に含む）
   "ST59級-防御巡洋戦艦",
-  "スピアーオブウラヌス級-重量級巡洋戦艦",
+  "スピアー オブ ウラヌス級-重量級巡洋戦艦",
   "エターナルストーム級-攻撃巡洋戦艦",
   "コンスタンティヌス級-総合巡洋戦艦",
   "スター オブ サンダーボルト-総合アーセナルシップ",
@@ -210,7 +210,7 @@ export const MASTER_ORDER: string[] = [
   "アントンタス・アーミジャ級-指揮艦",
   "CV3000級-高速航空母艦",
   "ソーラーホエール-武装戦略航空母艦",
-  "マーシャルクルックス級-武装航空母艦",
+  "マーシャル クルックス級-武装航空母艦",
   "エターナルヘブン級-UAV航空母艦",
   "FSV830-高速戦術支援艦",
   "エディアカラ級-重量級火力支援艦",
@@ -420,7 +420,7 @@ export const SERIES_NAMES: string[] = [
   "ワイルドファイア",
   "タンプル1号",
   "ST59級",
-  "スピアーオブウラヌス級",
+  "スピアー オブ ウラヌス級",
   "エターナルストーム級",
   "コンスタンティヌス級",
   "スター オブ サンダーボルト",
@@ -428,7 +428,7 @@ export const SERIES_NAMES: string[] = [
   "アントンタス・アーミジャ級",
   "CV3000級",
   "ソーラーホエール",
-  "マーシャルクルックス級",
+  "マーシャル クルックス級",
   "エターナルヘブン級",
   "FSV830",
   "エディアカラ級",
@@ -544,7 +544,7 @@ export const CLASS_BY_SERIES: Record<string, ShipClass> = {
 
   // 大型（シリーズ）
   "ST59級": "巡洋戦艦",
-  "スピアーオブウラヌス級": "巡洋戦艦",
+  "スピアー オブ ウラヌス級": "巡洋戦艦",
   "エターナルストーム級": "巡洋戦艦",
   "コンスタンティヌス級": "巡洋戦艦",
   "スター オブ サンダーボルト": "巡洋戦艦",
@@ -553,7 +553,7 @@ export const CLASS_BY_SERIES: Record<string, ShipClass> = {
 
   "CV3000級": "航空母艦",
   "ソーラーホエール": "航空母艦",
-  "マーシャルクルックス級": "航空母艦",
+  "マーシャル クルックス級": "航空母艦",
   "エターナルヘブン級": "航空母艦",
 
   "FSV830": "支援艦",
@@ -568,7 +568,7 @@ export function guessSeries(shipName: string): string | "" {
 
   // 括弧のシリーズ判定（モジュール用）
   if (n.includes("(ST)")) return "ST59級";
-  if (n.includes("(ウラヌス)")) return "スピアーオブウラヌス級";
+  if (n.includes("(ウラヌス)")) return "スピアー オブ ウラヌス級";
   if (n.includes("(エタスト)")) return "エターナルストーム級";
   if (n.includes("(コンスタ)")) return "コンスタンティヌス級";
   if (n.includes("(サンボル)")) return "スター オブ サンダーボルト";
@@ -577,7 +577,7 @@ export function guessSeries(shipName: string): string | "" {
 
   if (n.includes("(CV3000)")) return "CV3000級";
   if (n.includes("(太陽鯨)")) return "ソーラーホエール";
-  if (n.includes("(マーシャル)")) return "マーシャルクルックス級";
+  if (n.includes("(マーシャル)")) return "マーシャル クルックス級";
   if (n.includes("(エタヘブ)")) return "エターナルヘブン級";
 
   if (n.includes("(FSV)")) return "FSV830";
