@@ -413,7 +413,7 @@ export default function Home() {
         }}
       >
         <h1 style={{ fontSize: 20, fontWeight: "bold", marginBottom: 12 }}>戦力評価アプリ</h1>
-
+        <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 8 }}>横持ちのほうが入力しやすいです</div>
         {/* 新規ユーザー作成 */}
         <div style={{ marginBottom: 12, border: "1px solid #e5e7eb", borderRadius: 12, padding: 10 }}>
           <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 8 }}>新しく記入する方はこちらから入力</div>
