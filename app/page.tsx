@@ -15,7 +15,9 @@ import {
 
 type OwnedItem = { name: string; type: string };
 type UsersMap = Record<string, OwnedItem[]>;
-type SeriesPointsMap = Record<string, number>;
+
+// ✅ Ptは「未入力」を許可する
+type SeriesPointsMap = Partial<Record<string, number>>;
 type SeriesPointsByUserMap = Record<string, SeriesPointsMap>;
 
 // -------------------- 未使用Pt（艦種ごと） --------------------
@@ -32,8 +34,10 @@ const UNUSED_CLASSES = [
 ] as const;
 type UnusedClass = (typeof UNUSED_CLASSES)[number];
 
-type UnusedPointsMap = Record<UnusedClass, number>;
+// ✅ 未使用Ptも「未入力」を許可する（空欄表示したいので）
+type UnusedPointsMap = Partial<Record<UnusedClass, number>>;
 type UnusedPointsByUserMap = Record<string, UnusedPointsMap>;
+
 
 // --------------------
 const STORAGE_KEY_USERS = "senryoku_users_local_v1";
@@ -48,17 +52,17 @@ function clampInt(v: string) {
 }
 
 function emptyUnusedPoints(): UnusedPointsMap {
-  // 初期値は全部 0
+  // ✅ 初期値は全部「未入力(=undefined)」にして空欄表示
   return {
-    フリゲート: 0,
-    駆逐艦: 0,
-    巡洋艦: 0,
-    戦闘機: 0,
-    護送艦: 0,
-    巡洋戦艦: 0,
-    航空母艦: 0,
-    支援艦: 0,
-    戦艦: 0,
+    フリゲート: undefined,
+    駆逐艦: undefined,
+    巡洋艦: undefined,
+    戦闘機: undefined,
+    護送艦: undefined,
+    巡洋戦艦: undefined,
+    航空母艦: undefined,
+    支援艦: undefined,
+    戦艦: undefined,
   };
 }
 
@@ -66,6 +70,9 @@ export default function Home() {
   const [users, setUsers] = useState<UsersMap>({});
   const [seriesPointsByUser, setSeriesPointsByUser] = useState<SeriesPointsByUserMap>({});
   const [unusedPointsByUser, setUnusedPointsByUser] = useState<UnusedPointsByUserMap>({});
+    // 入力中の下書き（未確定）
+  const [seriesDraftByUser, setSeriesDraftByUser] = useState<Record<string, Record<string, string>>>({});
+  const [unusedDraftByUser, setUnusedDraftByUser] = useState<Record<string, Record<string, string>>>({});
 
   const [selectedUser, setSelectedUser] = useState<string>("");
   const [newUserName, setNewUserName] = useState<string>("");
@@ -82,14 +89,16 @@ export default function Home() {
     });
     return await res.json();
   }
-  async function apiUpsertUnusedPt(userName: string, cls: string, pt: number) {
+
+  async function apiUpsertUnusedPt(userName: string, cls: string, pt: number | null) {
     return await gasPost({
       action: "upsertUnusedPt",
       userName,
-      cls,   // ← "フリゲート" など
-      pt,    // ← 数値
+      cls,
+      pt, // null を送れる
     });
   }
+
 
   async function apiUpsertOwn(userName: string, shipName: string, own: boolean) {
     return await gasPost({
@@ -100,14 +109,16 @@ export default function Home() {
     });
   }
 
-  async function apiUpsertPt(userName: string, series: string, pt: number) {
-    return await gasPost({
-      action: "upsertPt",
-      userName,
-      series,
-      pt,
-    });
+  async function apiUpsertPt(userName: string, series: string, pt: number | null) {
+  return await gasPost({
+    action: "upsertPt",
+    userName,
+    series,
+    pt, // null を送れる
+  });
   }
+
+
 
   async function apiDeleteUser(userName: string) {
     return await gasPost({
@@ -152,7 +163,7 @@ export default function Home() {
     }
   }, []);
 
-  // ---------- 5秒ポーリング：スプシ → アプリ反映 ----------
+  // ---------- 1時間ポーリング：スプシ → アプリ反映 ----------
   useEffect(() => {
     let alive = true;
 
@@ -162,36 +173,23 @@ export default function Home() {
         if (!alive) return;
 
         if (data && data.ok) {
-          // ✅ users を上書きするのは「所持が1件でも入っている時だけ」
-          // export が users を全部 [] で返すバグ/未実装の間、UIが消えるのを防ぐ
-          if (data.users) {
-            const hasAnyOwned = Object.values(data.users).some(
-              (arr: any) => Array.isArray(arr) && arr.length > 0
-            );
+          // users は普通に上書き（exportが正しい前提）
+          if (data.users) setUsers(data.users);
 
-            if (hasAnyOwned) {
-              setUsers(data.users);
-            }
-            // ⚠️ 全員 [] のときは setUsers しない（総合Ptが0になるのを防ぐ）
-          }
+          if (data.seriesPointsByUser) setSeriesPointsByUser(data.seriesPointsByUser);
 
-          // Pt・未使用Ptは空でも上書きしてOK（空＝0が正しいため）
-          if (data.seriesPointsByUser) {
-            setSeriesPointsByUser(data.seriesPointsByUser);
-          }
-          if (data.unusedPointsByUser) {
-            setUnusedPointsByUser(data.unusedPointsByUser);
-          }
+          if (data.unusedPointsByUser) setUnusedPointsByUser(data.unusedPointsByUser);
         }
-
       } catch (e) {
         console.error("apiExport failed:", e);
       }
     };
 
+    // 起動直後に1回
     tick();
-    const id = setInterval(tick, 60 * 60 * 1000); // 1時間
 
+    // 1時間ごと
+    const id = setInterval(tick, 60 * 60 * 1000);
 
     return () => {
       alive = false;
@@ -218,7 +216,7 @@ export default function Home() {
     return seriesPointsByUser[selectedUser] || {};
   }, [seriesPointsByUser, selectedUser]);
 
-  // ✅ 未使用Pt（初期値0で必ず返す）
+  // ✅ 未使用Pt（未設定ならundefined）
   const unusedPoints: UnusedPointsMap = useMemo(() => {
     if (!selectedUser) return emptyUnusedPoints();
     return unusedPointsByUser[selectedUser] || emptyUnusedPoints();
@@ -238,55 +236,56 @@ export default function Home() {
   }, [users, selectedUser]);
 
   // ✅ 分類ごとの合計Pt（シリーズPt合計 + 未使用Ptを加算）
-const totalsByClass = useMemo(() => {
-  const totals: Record<string, number> = {};
+  const totalsByClass = useMemo(() => {
+    const totals: Record<string, number> = {};
 
-  // 初期化
-  for (const c of CLASS_ORDER) totals[c] = 0;
-  if (!selectedUser) return totals;
+    // 「総合Pt」表示にしたいので、CLASS_ORDER の "未分類" を "総合Pt" 表示として使う想定なら
+    // ここでは totals のキーはそのままで OK（表示側でラベルを変えてるなら）
+    for (const c of CLASS_ORDER) totals[c] = 0;
 
-  // ① シリーズPt（同シリーズ1回）
-  const ownedSeries = new Set<string>();
-  for (const it of ownedList) {
-    const s = guessSeries(it.name);
-    if (s) ownedSeries.add(s);
-  }
+    if (!selectedUser) return totals;
 
-  for (const s of ownedSeries) {
-    const cls = CLASS_BY_SERIES[s];
-    if (!cls) continue;
-
-    // モジュールは除外
-    if (
-      cls === "巡洋戦艦モジュール" ||
-      cls === "航空母艦モジュール" ||
-      cls === "支援艦モジュール" ||
-      cls === "戦艦モジュール"
-    ) {
-      continue;
+    // ① シリーズPt（同シリーズ1回）
+    const ownedSeries = new Set<string>();
+    for (const it of ownedList) {
+      const s = guessSeries(it.name);
+      if (s) ownedSeries.add(s);
     }
 
-    totals[cls] += seriesPoints[s] ?? 0;
-  }
+    for (const s of ownedSeries) {
+      const cls = CLASS_BY_SERIES[s];
+      if (!cls) continue;
 
-  // ② 未使用Ptを各分類に加算（型安全）
-  for (const cls of UNUSED_CLASSES) {
-    totals[cls] += unusedPoints[cls] ?? 0;
-  }
+      // モジュールは除外
+      if (
+        cls === "巡洋戦艦モジュール" ||
+        cls === "航空母艦モジュール" ||
+        cls === "支援艦モジュール" ||
+        cls === "戦艦モジュール"
+      ) {
+        continue;
+      }
+
+      totals[cls] += seriesPoints[s] ?? 0;
+    }
+
+    // ② 未使用Ptを各分類に加算（型安全）
+    for (const cls of UNUSED_CLASSES) {
+      totals[cls] += unusedPoints[cls] ?? 0;
+    }
+
+    let grand = 0;
+
+    for (const c of CLASS_ORDER) {
+      if (c === "総合Pt") continue; // ← 総合Pt 自身は合算しない
+      grand += totals[c] ?? 0;
+    }
+
+    totals["総合Pt"] = grand;
 
 
-  // ③ 総合Pt = 全分類の合計
-  let grandTotal = 0;
-  for (const cls of CLASS_ORDER) {
-    if (cls === "総合Pt") continue;
-    grandTotal += totals[cls] ?? 0;
-  }
-  totals["総合Pt"] = grandTotal;
-
-  return totals;
-}, [selectedUser, ownedList, seriesPoints, unusedPoints]);
-
-
+    return totals;
+  }, [selectedUser, ownedList, seriesPoints, unusedPoints]);
 
   // ✅ 図鑑（MASTER_ORDER順＋検索＋フィルタ）
   const filteredCatalog: OwnedItem[] = useMemo(() => {
@@ -330,7 +329,7 @@ const totalsByClass = useMemo(() => {
     return list;
   }, [users, shipType, shipQuery]);
 
-  // ---------- ユーザー作成（ローカルだけ） ----------
+  // ---------- ユーザー作成（ローカルも） ----------
   function ensureUser(name: string) {
     const n = name.trim();
     if (!n) return "";
@@ -564,7 +563,7 @@ const totalsByClass = useMemo(() => {
             <div style={{ fontSize: 14 }}>
               選択中：<b>{selectedUser}</b> ／ 所持 {(users[selectedUser] || []).length} 件
               <div style={{ marginTop: 8, fontSize: 13, color: "#111827" }}>
-                <b>分類ごとの合計Pt</b>（未使用Ptを加算）
+                <b>分類ごとの合計Pt</b>（未使用Ptを加算 / 未分類は総合Pt）
               </div>
 
               <div style={{ marginTop: 6, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -582,6 +581,7 @@ const totalsByClass = useMemo(() => {
                     }}
                   >
                     <span style={{ fontWeight: 600 }}>{cls}</span>
+                    
                     <span style={{ fontWeight: 800 }}>{totalsByClass[cls] ?? 0}</span>
                   </div>
                 ))}
@@ -606,134 +606,183 @@ const totalsByClass = useMemo(() => {
           </select>
         </div>
 
+        {SERIES_NAMES.map((s) => {
+          const saved = seriesPointsByUser[selectedUser]?.[s]; // number | undefined
+          const draft = seriesDraftByUser[selectedUser]?.[s];
 
+          const displayValue = draft !== undefined
+            ? draft
+            : (saved === undefined ? "" : String(saved));
 
-        {/* Pt入力 */}
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>Pt設定（シリーズごと）</div>
+          return (
+            <div key={s} style={{ display: "flex", justifyContent: "space-between", gap: 8, border: "1px solid #f3f4f6", borderRadius: 10, padding: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{s}</div>
 
-          {!selectedUser ? (
-            <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 220, overflow: "auto" }}>
-              {SERIES_NAMES.map((s) => {
-                // ✅ 初期値は 0 にする
-                const v = seriesPoints[s] ?? 0;
-                return (
-                  <div
-                    key={s}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 8,
-                      border: "1px solid #f3f4f6",
-                      borderRadius: 10,
-                      padding: 8,
-                    }}
-                  >
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{s}</div>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      step={1}
-                      value={v}
-                      onChange={(e) => {
-                        if (!selectedUser) return;
-                        const val = clampInt(e.target.value);
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                value={displayValue}
+                onChange={(e) => {
+                  if (!selectedUser) return;
+                  const raw = e.target.value; // 空欄もそのまま持つ
+                  setSeriesDraftByUser((prev) => ({
+                    ...prev,
+                    [selectedUser]: { ...(prev[selectedUser] || {}), [s]: raw },
+                  }));
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur(); // Enterで確定
+                }}
+                onBlur={async () => {
+                  if (!selectedUser) return;
 
-                        setSeriesPointsByUser((prev) => ({
-                          ...prev,
-                          [selectedUser]: { ...(prev[selectedUser] || {}), [s]: val },
-                        }));
+                  const raw = seriesDraftByUser[selectedUser]?.[s];
 
-                        (async () => {
-                          try {
-                            await apiUpsertPt(selectedUser, s, val);
-                          } catch (err) {
-                            console.error("GAS同期失敗(pt)", err);
-                          }
-                        })();
-                      }}
-                      style={{ width: 90, padding: 8, border: "1px solid #d1d5db", borderRadius: 10, textAlign: "right" }}
-                    />
-                  </div>
-                );
-              })}
+                  // draftが無い = 触ってない
+                  if (raw === undefined) return;
+
+                  // 空欄ならクリア（null送信）
+                  if (raw.trim() === "") {
+                    setSeriesPointsByUser((prev) => ({
+                      ...prev,
+                      [selectedUser]: { ...(prev[selectedUser] || {}), [s]: undefined },
+                    }));
+                    setSeriesDraftByUser((prev) => {
+                      const next = { ...prev };
+                      const u = { ...(next[selectedUser] || {}) };
+                      delete u[s];
+                      next[selectedUser] = u;
+                      return next;
+                    });
+
+                    try {
+                      await apiUpsertPt(selectedUser, s, null);
+                    } catch (err) {
+                      console.error("GAS同期失敗(pt)", err);
+                    }
+                    return;
+                  }
+
+                  // 数値確定
+                  const val = clampInt(raw);
+
+                  setSeriesPointsByUser((prev) => ({
+                    ...prev,
+                    [selectedUser]: { ...(prev[selectedUser] || {}), [s]: val },
+                  }));
+
+                  // draft消す
+                  setSeriesDraftByUser((prev) => {
+                    const next = { ...prev };
+                    const u = { ...(next[selectedUser] || {}) };
+                    delete u[s];
+                    next[selectedUser] = u;
+                    return next;
+                  });
+
+                  try {
+                    await apiUpsertPt(selectedUser, s, val);
+                  } catch (err) {
+                    console.error("GAS同期失敗(pt)", err);
+                  }
+                }}
+                style={{ width: 90, padding: 8, border: "1px solid #d1d5db", borderRadius: 10, textAlign: "right" }}
+              />
             </div>
-          )}
-        </div>
+          );
+        })}
 
-        {/* 未使用Pt入力（艦種ごと） */}
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>未使用Pt（艦種ごと）</div>
 
-          {!selectedUser ? (
-            <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 220, overflow: "auto" }}>
-              {UNUSED_CLASSES.map((cls) => {
-                // ✅ 初期値は 0 にする
-                const v = unusedPoints[cls] ?? 0;
-                return (
-                  <div
-                    key={cls}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 8,
-                      border: "1px solid #f3f4f6",
-                      borderRadius: 10,
-                      padding: 8,
-                    }}
-                  >
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{cls}</div>
 
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      step={1}
-                      value={v}
-                      onChange={(e) => {
-                        if (!selectedUser) return;
-                        const val = clampInt(e.target.value);
 
-                        // ローカル更新（すぐ反映）
-                        setUnusedPointsByUser((prev) => ({
-                          ...prev,
-                          [selectedUser]: {
-                            ...(prev[selectedUser] || emptyUnusedPoints()),
-                            [cls]: val,
-                          },
-                      }));
+        {UNUSED_CLASSES.map((cls) => {
+          const saved = unusedPointsByUser[selectedUser]?.[cls]; // number | undefined（あなたの実装次第）
+          const draft = unusedDraftByUser[selectedUser]?.[cls];
 
-  // ✅ スプシへ保存（これがないとポーリングで消える）
-  (async () => {
-    try {
-      await apiUpsertUnusedPt(selectedUser, cls, val);
-    } catch (err) {
-      console.error("GAS同期失敗(unused)", err);
-    }
-  })();
-                      }}
+          const displayValue = draft !== undefined
+            ? draft
+            : (saved === undefined ? "" : String(saved));
 
-                      style={{
-                        width: 90,
-                        padding: "8px 8px",
-                        border: "1px solid #d1d5db",
-                        borderRadius: 10,
-                        outline: "none",
-                        textAlign: "right",
-                      }}
-                    />
-                  </div>
-                );
-              })}
+          return (
+            <div key={cls} style={{ display: "flex", justifyContent: "space-between", gap: 8, border: "1px solid #f3f4f6", borderRadius: 10, padding: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{cls}</div>
+
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                value={displayValue}
+                onChange={(e) => {
+                  if (!selectedUser) return;
+                  const raw = e.target.value;
+                  setUnusedDraftByUser((prev) => ({
+                    ...prev,
+                    [selectedUser]: { ...(prev[selectedUser] || {}), [cls]: raw },
+                  }));
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                }}
+                onBlur={async () => {
+                  if (!selectedUser) return;
+
+                  const raw = unusedDraftByUser[selectedUser]?.[cls];
+                  if (raw === undefined) return;
+
+                  if (raw.trim() === "") {
+                    // 空欄にしたい（GAS側もclear）
+                    setUnusedPointsByUser((prev) => ({
+                      ...prev,
+                      [selectedUser]: { ...(prev[selectedUser] || {}), [cls]: undefined as any },
+                    }));
+
+                    setUnusedDraftByUser((prev) => {
+                      const next = { ...prev };
+                      const u = { ...(next[selectedUser] || {}) };
+                      delete u[cls];
+                      next[selectedUser] = u;
+                      return next;
+                    });
+
+                    try {
+                      await apiUpsertUnusedPt(selectedUser, cls, null); // ← api側を null 対応にする（後述）
+                    } catch (err) {
+                      console.error("GAS同期失敗(unused)", err);
+                    }
+                    return;
+                  }
+
+                  const val = clampInt(raw);
+
+                  setUnusedPointsByUser((prev) => ({
+                    ...prev,
+                    [selectedUser]: { ...(prev[selectedUser] || {}), [cls]: val as any },
+                  }));
+
+                  setUnusedDraftByUser((prev) => {
+                    const next = { ...prev };
+                    const u = { ...(next[selectedUser] || {}) };
+                    delete u[cls];
+                    next[selectedUser] = u;
+                    return next;
+                  });
+
+                  try {
+                    await apiUpsertUnusedPt(selectedUser, cls, val);
+                  } catch (err) {
+                    console.error("GAS同期失敗(unused)", err);
+                  }
+                }}
+                style={{ width: 90, padding: 8, border: "1px solid #d1d5db", borderRadius: 10, textAlign: "right" }}
+              />
             </div>
-          )}
-        </div>
+          );
+        })}
+
+
 
         {/* 所持 */}
         <div style={{ marginBottom: 10 }}>
@@ -785,8 +834,8 @@ const totalsByClass = useMemo(() => {
         </div>
 
         <div style={{ marginTop: 12, fontSize: 12, color: "#6b7280" }}>
-          ※ Pt/未使用Pt の入力欄は初期値 0 表示です。<br />
-          ※ 未使用Ptのスプシ(NJ〜NR)保存は次にGAS側を追加するときに対応します。
+          ※ ポーリングは 1時間に1回です（起動時は即時1回）。<br />
+          ※ 「未分類」は画面上は「総合Pt」として表示し、中身は全分類合計です。
         </div>
       </div>
     </main>
