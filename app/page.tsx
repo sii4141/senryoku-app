@@ -801,9 +801,10 @@ export default function Home() {
           </select>
         </div>
 
-        {/* Pt設定（設計図ごと） */}
+        {/* Pt設定(設計図ごと)*/}
         <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>技術Ptの数を入力（設計図ごと）</div>
+          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>技術Ptの数を入力(設計図ごと)</div>
+           <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>ポイントを振っていない場合でも，設計図を所持していれば0を入力してください</div>
 
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
