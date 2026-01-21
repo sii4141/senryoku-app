@@ -515,16 +515,23 @@ export default function Home() {
   }, [users, shipType, shipQuery]);
 
   // ---------- ユーザー作成（ローカルも） ----------
-  function ensureUser(name: string) {
+  function ensureUser(name: string): { user: string; created: boolean } {
     const n = name.trim();
-    if (!n) return "";
-
-    setUsers((prev) => (prev[n] ? prev : { ...prev, [n]: [] }));
-    setSeriesPointsByUser((prev) => (prev[n] ? prev : { ...prev, [n]: {} }));
-    setUnusedPointsByUser((prev) => (prev[n] ? prev : { ...prev, [n]: emptyUnusedPoints() }));
-
-    return n;
+    if (!n) return { user: "", created: false };
+  
+    const exists = Object.prototype.hasOwnProperty.call(users || {}, n);
+  
+    // 既存なら state は変えない
+    if (exists) return { user: n, created: false };
+  
+    // 新規だけ追加
+    setUsers((prev) => ({ ...prev, [n]: [] }));
+    setSeriesPointsByUser((prev) => ({ ...prev, [n]: {} }));
+    setUnusedPointsByUser((prev) => ({ ...prev, [n]: emptyUnusedPoints() }));
+  
+    return { user: n, created: true };
   }
+
 
   // ---------- ユーザー削除 ----------
   async function deleteUser(userName: string) {
@@ -611,21 +618,48 @@ export default function Home() {
             />
             <button
               onClick={async () => {
-                const u = ensureUser(newUserName);
+                const { user: u, created } = ensureUser(newUserName);
                 if (!u) return;
-
+              
+                // ✅ すでに同名がいるなら中断
+                if (!created) {
+                  alert("そのユーザーはすでに作成済みです");
+                  return;
+                }
+              
+                // ✅ 新規のときだけGASへ作成
                 try {
                   await apiCreateUser(u);
                 } catch (e) {
                   console.error("GASユーザー作成失敗", e);
                   alert("スプレッドシート側にユーザー名を書けませんでした（B3:B149が埋まっている可能性）");
+              
+                  // 失敗したらローカルも戻す（任意だがおすすめ）
+                  setUsers((prev) => {
+                    const next = { ...prev };
+                    delete next[u];
+                    return next;
+                  });
+                  setSeriesPointsByUser((prev) => {
+                    const next = { ...prev };
+                    delete next[u];
+                    return next;
+                  });
+                  setUnusedPointsByUser((prev) => {
+                    const next = { ...prev };
+                    delete next[u];
+                    return next;
+                  });
+              
                   return;
                 }
-
+              
+                // ✅ UI側も選択状態にする
                 setSelectedUser(u);
                 setUserQuery(u);
                 setNewUserName("");
               }}
+
               style={{
                 padding: "10px 12px",
                 borderRadius: 10,
