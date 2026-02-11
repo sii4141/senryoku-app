@@ -417,7 +417,7 @@ export const SERIES_NAMES: string[] = [
   "開陽級",
   "XT-11級",
   "先登級",
-  "ヘリオス級-",
+  "ヘリオス級",
   "KCCPV2.0",
   "CAS066",
   "イオ級",
@@ -540,7 +540,7 @@ export const CLASS_BY_SERIES: Record<string, ShipClass> = {
   "開陽級": "駆逐艦",
   "XT-11級": "駆逐艦",
   "先登級": "駆逐艦",
-  "ヘリオス級-": "駆逐艦",
+  "ヘリオス級": "駆逐艦",
 
   // 巡洋艦
   "KCCPV2.0": "巡洋艦",
