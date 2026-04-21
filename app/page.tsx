@@ -935,7 +935,7 @@ export default function Home() {
                         }
                       }}
                       style={{
-                        width: 25,
+                        width: 35,
                         padding: 8,
                         border: "1px solid #d1d5db",
                         borderRadius: 10,
@@ -1052,7 +1052,7 @@ export default function Home() {
                         }
                       }}
                       style={{
-                        width: 25,
+                        width: 35,
                         padding: 8,
                         border: "1px solid #d1d5db",
                         borderRadius: 10,
@@ -1133,7 +1133,7 @@ export default function Home() {
           userSelect: "none",
         }}
       >
-        v1.135
+        v1.136
 </div>
 
     </main>
