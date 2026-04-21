@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import initialData from "@/src/data/data.json";
 import { CLASS_ORDER } from "@/lib/ships";
 import { calcTotalsByClass } from "@/lib/ranking";
+import Link from "next/link";
 
 type OwnedItem = { name: string; type: string };
 type UsersMap = Record<string, OwnedItem[]>;
@@ -96,12 +97,45 @@ export default function RankingPage() {
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif',
       }}
     >
-      <div style={{ maxWidth: 960, margin: "0 auto" }}>
+      <div
+        style={{
+            width: "100%",
+            margin: 0,
+            padding: "0 12px",
+            boxSizing: "border-box",
+        }}
+       >
         <h1 style={{ fontSize: 24, fontWeight: "bold", marginBottom: 16 }}>
           分類別ランキング
         </h1>
-
-        <div style={{ display: "grid", gap: 16 }}>
+        <div style={{ marginBottom: 12 }}>
+        <Link
+            href="/"
+            style={{
+            display: "inline-block",
+            padding: "10px 14px",
+            background: "#2563eb",
+            color: "white",
+            borderRadius: 10,
+            textDecoration: "none",
+            fontWeight: "bold",
+            }}
+        >
+            ポイント入力ページへ
+        </Link>
+        </div>
+        <div
+            style={{
+                display: "flex",
+                gap: 16,
+                overflowX: "auto",
+                overflowY: "hidden",
+                paddingBottom: 8,
+                paddingTop: 8,
+                 // ←これ
+            }}
+        >
+            
           {CLASS_ORDER.map((cls) => {
             const dark = ["巡洋戦艦", "支援艦", "戦艦", "総合Pt"].includes(cls);
 
@@ -109,10 +143,13 @@ export default function RankingPage() {
               <section
                 key={cls}
                 style={{
-                  background: "white",
-                  borderRadius: 12,
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-                  overflow: "hidden",
+                    minWidth: 280,
+                    maxWidth: 280,
+                    flexShrink: 0,
+                    background: CLASS_COLOR[cls] || "#ffffff",
+                    borderRadius: 12,
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                    overflow: "hidden",
                 }}
               >
                 <div
@@ -128,26 +165,49 @@ export default function RankingPage() {
                 </div>
 
                 <div style={{ padding: 12 }}>
-                  {rankingByClass[cls]?.map((row, index) => (
-                    <div
-                      key={`${cls}_${row.user}`}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        padding: "10px 8px",
-                        borderBottom: "1px solid #f3f4f6",
-                      }}
-                    >
-                      <div>
-                        <span style={{ fontWeight: "bold", marginRight: 8 }}>
-                          {index + 1}位
-                        </span>
-                        <span>{row.user}</span>
-                      </div>
-                      <div style={{ fontWeight: "bold" }}>{row.pt}</div>
-                    </div>
-                  ))}
+                    {rankingByClass[cls]
+                    ?.slice(0, 20)
+                    .map((row, index) => {
+                    let bgColor = "transparent";
+                    let textColor = "black";
+
+                    // 背景色（そのまま）
+                    if (index === 0) {
+                    bgColor = "#ffff00";
+                    } else if (index === 1) {
+                    bgColor = "#b7b7b7";
+                    } else if (index === 2) {
+                    bgColor = "#b45f06";
+                    }
+
+                    // 文字色
+                    if (index === 0) {
+                    textColor = "#ff0000"; // 1位
+                    } else if (cls === "総合Pt" && index >= 3) {
+                    textColor = "white";   // ←ここが今回の条件
+                    }
+
+                        return (
+                        <div
+                            key={`${cls}_${row.user}`}
+                            style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            padding: "10px 8px",
+                            borderBottom: "1px solid #f3f4f6",
+                            background: bgColor,
+                            color: textColor,
+                            fontWeight: index < 3 ? "bold" : "normal",
+                            }}
+                        >
+                            <div>
+                            {index + 1}位 {row.user}
+                            </div>
+                            <div>{row.pt}</div>
+                        </div>
+                        );
+                    })}
                 </div>
               </section>
             );
