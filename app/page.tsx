@@ -935,7 +935,7 @@ export default function Home() {
                         }
                       }}
                       style={{
-                        width: 90,
+                        width: 25,
                         padding: 8,
                         border: "1px solid #d1d5db",
                         borderRadius: 10,
@@ -1052,7 +1052,7 @@ export default function Home() {
                         }
                       }}
                       style={{
-                        width: 90,
+                        width: 25,
                         padding: 8,
                         border: "1px solid #d1d5db",
                         borderRadius: 10,
