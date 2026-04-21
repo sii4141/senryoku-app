@@ -609,7 +609,14 @@ export default function Home() {
   }
 
   return (
-    <main style={{ minHeight: "100vh", background: "#f3f4f6", padding: 16 }}>
+    <main
+      style={{
+        minHeight: "100vh",
+        background: "#f3f4f6",
+        padding: 16,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif'
+      }}
+    >
       <div
         style={{
           maxWidth: 760,
