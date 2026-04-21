@@ -883,6 +883,7 @@ export default function Home() {
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
+                      alignItems: "center",
                       gap: 8,
                       border: "1px solid #f3f4f6",
                       borderRadius: 10,
@@ -1003,6 +1004,7 @@ export default function Home() {
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
+                      alignItems: "center",
                       gap: 8,
                       border: "1px solid #f3f4f6",
                       borderRadius: 10,
@@ -1165,7 +1167,7 @@ export default function Home() {
           userSelect: "none",
         }}
       >
-        v1.14
+        v1.141
 </div>
 
     </main>
