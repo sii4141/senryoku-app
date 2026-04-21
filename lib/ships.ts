@@ -615,7 +615,7 @@ export const CLASS_BY_SERIES: Record<string, ShipClass> = {
 /** 艦名 → シリーズ名 */
 export function guessSeries(shipName: string): string | "" {
   const n = normalize(shipName);
-
+  if (n.includes("AC720-エイグラム未名者")) return "AC721";
   // 括弧のシリーズ判定（モジュール用）
   if (n.includes("(ST)")) return "ST59級";
   if (n.includes("(ウラヌス)")) return "スピアー オブ ウラヌス級";
@@ -645,10 +645,25 @@ export function guessSeries(shipName: string): string | "" {
 
 function isModuleName(name: string) {
   const s = normalize(name);
-  // 今のルール：括弧が入ってたらモジュール扱い
-  return s.includes("(") && s.includes(")");
+  return (
+    s.includes("(ST)") ||
+    s.includes("(ウラヌス)") ||
+    s.includes("(エタスト)") ||
+    s.includes("(コンスタ)") ||
+    s.includes("(サンボル)") ||
+    s.includes("(プルートス)") ||
+    s.includes("(アーミジャ)") ||
+    s.includes("(天権)") ||
+    s.includes("(CV3000)") ||
+    s.includes("(太陽鯨)") ||
+    s.includes("(マーシャル)") ||
+    s.includes("(エタヘブ)") ||
+    s.includes("(天枢)") ||
+    s.includes("(FSV)") ||
+    s.includes("(エディ)") ||
+    s.includes("(リヴェンジ)")
+  );
 }
-
 /** 艦名 → 分類 */
 export function classifyByName(shipName: string): ShipClass {
   const s = normalize(shipName);

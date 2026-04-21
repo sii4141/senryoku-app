@@ -33,6 +33,22 @@ const UNUSED_CLASSES = [
   "戦艦",
 ] as const;
 type UnusedClass = (typeof UNUSED_CLASSES)[number];
+const CLASS_COLOR: Record<string, string> = {
+  フリゲート: "#9fc5e8",
+  駆逐艦: "#ffe599",
+  巡洋艦: "#93c47d",
+  護送艦: "#c27ba0",
+  戦闘機: "#f9cb9c",
+  巡洋戦艦: "#3c78d8",
+  航空母艦: "#f1c232",
+  支援艦: "#cc4125",
+  戦艦: "#674ea7",
+  総合Pt: "#ff0000", 
+  巡洋戦艦モジュール: "#6d9eeb",
+  航空母艦モジュール: "#ffd966",
+  支援艦モジュール: "#dd7e6b",
+  戦艦モジュール: "#8e7cc3",
+};
 
 // ✅ 未使用Ptも「未入力」を許可する（空欄表示したいので）
 type UnusedPointsMap = Partial<Record<UnusedClass, number>>;
@@ -803,7 +819,7 @@ export default function Home() {
                       border: "1px solid #e5e7eb",
                       borderRadius: 10,
                       padding: 10,
-                      background: "#fafafa",
+                      background: CLASS_COLOR[cls] || "#fafafa",
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
@@ -845,6 +861,8 @@ export default function Home() {
           ) : (
             <div ref={refSeriesBox}style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 220, overflow: "auto" }}>
               {SERIES_NAMES.map((s) => {
+                const cls = CLASS_BY_SERIES[s];
+                const bgColor = CLASS_COLOR[cls] || "#ffffff";
                 const saved = seriesPointsByUser[selectedUser]?.[s]; // number | undefined
                 const draft = seriesDraftByUser[selectedUser]?.[s];  // string | undefined
 
@@ -852,6 +870,7 @@ export default function Home() {
                   draft !== undefined ? draft : (saved === undefined ? "" : String(saved));
 
                 return (
+                  
                   <div
                     key={s}
                     style={{
@@ -861,6 +880,7 @@ export default function Home() {
                       border: "1px solid #f3f4f6",
                       borderRadius: 10,
                       padding: 8,
+                      background: bgColor,
                     }}
                   >
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{s}</div>
@@ -935,11 +955,12 @@ export default function Home() {
                         }
                       }}
                       style={{
-                        width: 35,
+                        width: 40,
                         padding: 8,
                         border: "1px solid #d1d5db",
                         borderRadius: 10,
                         textAlign: "right",
+                        
                       }}
                     />
                   </div>
@@ -962,6 +983,7 @@ export default function Home() {
           ) : (
             <div ref={refUnusedBox}style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 220, overflow: "auto" }}>
               {UNUSED_CLASSES.map((cls) => {
+                const bgColor = CLASS_COLOR[cls] || "#ffffff";
                 const saved = unusedPointsByUser[selectedUser]?.[cls]; // number | undefined
                 const draft = unusedDraftByUser[selectedUser]?.[cls];  // string | undefined
 
@@ -978,6 +1000,7 @@ export default function Home() {
                       border: "1px solid #f3f4f6",
                       borderRadius: 10,
                       padding: 8,
+                      background: bgColor,
                     }}
                   >
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{cls}</div>
@@ -1052,7 +1075,7 @@ export default function Home() {
                         }
                       }}
                       style={{
-                        width: 35,
+                        width: 40,
                         padding: 8,
                         border: "1px solid #d1d5db",
                         borderRadius: 10,
@@ -1077,20 +1100,21 @@ export default function Home() {
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
           ) : (
             <div ref={refOwnedBox}style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, maxHeight: 420, overflow: "auto" }}>
-              {filteredCatalog.map((it, idx) => {
+              {filteredCatalog.map((it, idx) => {            
                 const owned = isOwned(selectedUser, it.name);
                 const cls = classifyByName(it.name);
+                const bgColor = CLASS_COLOR[cls] || "#ffffff";
                 const series = guessSeries(it.name);
                 const pt = series ? (seriesPoints[series] ?? 0) : 0;
 
                 return (
                   <div
                     key={`${it.name}__${idx}`}
-                    style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "10px 8px", borderBottom: "1px solid #f3f4f6" }}
+                    style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "10px 8px", borderBottom: "1px solid #f3f4f6" , background: bgColor,}}
                   >
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 600 }}>{it.name}</div>
-                      <div style={{ fontSize: 12, color: "#6b7280" }}>
+                      <div style={{ fontSize: 12, color: "#000000" }}>
                         {cls} / {series ? `シリーズ:${series} / Pt:${pt}` : "シリーズ未判定 / Pt:0"}
                       </div>
                     </div>
@@ -1106,6 +1130,7 @@ export default function Home() {
                         fontSize: 18,
                         fontWeight: "bold",
                         cursor: "pointer",
+                    
                       }}
                       title="所持を切り替え"
                     >
@@ -1133,7 +1158,7 @@ export default function Home() {
           userSelect: "none",
         }}
       >
-        v1.136
+        v1.14
 </div>
 
     </main>
