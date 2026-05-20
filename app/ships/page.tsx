@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
 import shipZukan from "@/src/data/ship-zukan.json";
 
 type Ship = Record<string, string | number>;
@@ -9,9 +10,28 @@ type Detail = Record<string, string | number>;
 type Enhancement = Record<string, string | number>;
 type ShipGroup = "全艦船" | "小型艦" | "大型艦" | "艦載機" | "モジュール";
 
-const ships = shipZukan.ships as Ship[];
-const details = shipZukan.details as Detail[];
-const enhancements = shipZukan.enhancements as Enhancement[];
+type AppliedStats = {
+  antiShipDpm: number;
+  antiAirDpm: number;
+  siegeDpm: number;
+  hp: number;
+  armor: number;
+  shield: number;
+  cruise: number;
+  warp: number;
+  checkedCount: number;
+  totalTp: number;
+};
+
+const data = shipZukan as unknown as {
+  ships: Ship[];
+  details: Detail[];
+  enhancements: Enhancement[];
+};
+
+const ships = data.ships ?? [];
+const details = data.details ?? [];
+const enhancements = data.enhancements ?? [];
 
 const CLASS_COLOR: Record<string, string> = {
   フリゲート: "#9fc5e8",
@@ -25,16 +45,48 @@ const CLASS_COLOR: Record<string, string> = {
   戦艦: "#674ea7",
 };
 
+const CLASSIFICATION_ICON: Record<string, string> = {
+  M武装: "/icons/M_weapon.png",
+  武装: "/icons/weapon.png",
+  M装甲: "/icons/M_armor.png",
+  装甲: "/icons/armor.png",
+  動力: "/icons/engine.png",
+  M指令: "/icons/M_command.png",
+  指令: "/icons/command.png",
+  M補修: "/icons/M_repair.png",
+  補修: "/icons/repair.png",
+  M艦載機: "/icons/M_fighter.png",
+  艦載機: "/icons/fighter.png",
+  Mエネルギー: "/icons/M_energy.png",
+  エネルギー: "/icons/energy.png",
+};
+
 function text(v: unknown) {
   if (v === undefined || v === null || v === "") return "-";
   return String(v);
 }
 
+function toNumber(v: unknown) {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v.replace(/,/g, ""));
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
 function num(v: unknown) {
   if (v === undefined || v === null || v === "") return "-";
-  if (typeof v === "number") return v.toLocaleString("ja-JP");
-  const n = Number(v);
-  return Number.isFinite(n) ? n.toLocaleString("ja-JP") : String(v);
+  const n = toNumber(v);
+  if (!Number.isFinite(n)) return String(v);
+  return Math.round(n).toLocaleString("ja-JP");
+}
+
+function percent(v: unknown) {
+  const n = toNumber(v);
+  if (!n) return "";
+  if (Math.abs(n) < 1) return `${n > 0 ? "+" : ""}${Math.round(n * 100)}%`;
+  return `${n > 0 ? "+" : ""}${n}`;
 }
 
 function matchesGroup(shipType: string, group: ShipGroup) {
@@ -50,10 +102,93 @@ function makeKey(v: unknown) {
   return String(v ?? "").trim();
 }
 
+function enhancementKey(row: Enhancement, index: number) {
+  return [
+    makeKey(row["艦船名"]),
+    makeKey(row["分類"]),
+    makeKey(row["システム名"]),
+    makeKey(row["システム名称"]),
+    makeKey(row["効果"]),
+    index,
+  ].join("__");
+}
+
+function calcAppliedStats(ship: Ship | undefined, checkedEnhancements: Enhancement[]): AppliedStats {
+  const baseAntiShip = toNumber(ship?.["対艦DPM"]);
+  const baseAntiAir = toNumber(ship?.["対空DPM"]);
+  const baseSiege = toNumber(ship?.["攻城DPM"]);
+  const baseHp = toNumber(ship?.["HP"]);
+  const baseArmor = toNumber(ship?.["装甲値"]);
+  const baseShield = toNumber(ship?.["シールド値"]);
+  const baseCruise = toNumber(ship?.["巡航速度"]);
+  const baseWarp = toNumber(ship?.["ワープ速度"]);
+
+  let damageMul = 1;
+  let antiAirMul = 1;
+  let siegeMul = 1;
+  let cooldownMul = 1;
+  let hpMul = 1;
+  let armorAdd = 0;
+  let shieldMul = 1;
+  let cruiseMul = 1;
+  let warpMul = 1;
+  let totalTp = 0;
+
+  for (const row of checkedEnhancements) {
+    const tp = toNumber(row["技術Pt"]);
+    if (tp > 0) totalTp += tp;
+
+    const single = toNumber(row["単発"]);
+    if (single) damageMul *= 1 + single;
+
+    const aa = toNumber(row["対空ダメージ"]);
+    if (aa) antiAirMul *= 1 + aa;
+
+    const siege = toNumber(row["攻城ダメージ"]);
+    if (siege) siegeMul *= 1 + siege;
+
+    const cooldown = toNumber(row["冷却"]);
+    if (cooldown) {
+      // 冷却+10% は攻撃間隔10%短縮としてDPMを 1 / (1 - 0.10) 倍にする。
+      // 負値は逆にDPM低下として扱う。
+      cooldownMul *= 1 / Math.max(0.05, 1 - cooldown);
+    }
+
+    const hp = toNumber(row["HP"]);
+    if (hp) hpMul *= 1 + hp;
+
+    const armor = toNumber(row["装甲"]);
+    if (armor) armorAdd += armor;
+
+    const shield = toNumber(row["シールド"]);
+    if (shield) shieldMul *= 1 + shield;
+
+    const cruise = toNumber(row["巡航速度"]);
+    if (cruise) cruiseMul *= 1 + cruise;
+
+    const warp = toNumber(row["ワープ速度"]);
+    if (warp) warpMul *= 1 + warp;
+  }
+
+  return {
+    antiShipDpm: baseAntiShip * damageMul * cooldownMul,
+    antiAirDpm: baseAntiAir * damageMul * antiAirMul * cooldownMul,
+    siegeDpm: baseSiege * damageMul * siegeMul * cooldownMul,
+    hp: baseHp * hpMul,
+    armor: baseArmor + armorAdd,
+    shield: baseShield * shieldMul,
+    cruise: baseCruise * cruiseMul,
+    warp: baseWarp * warpMul,
+    checkedCount: checkedEnhancements.length,
+    totalTp,
+  };
+}
+
 export default function ShipZukanPage() {
   const [group, setGroup] = useState<ShipGroup>("全艦船");
   const [query, setQuery] = useState("");
   const [selectedName, setSelectedName] = useState<string>(() => makeKey(ships[0]?.["艦船名称"]));
+  const [checkedMap, setCheckedMap] = useState<Record<string, boolean>>({});
 
   const filteredShips = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -73,6 +208,11 @@ export default function ShipZukanPage() {
 
   const currentName = makeKey(selectedShip?.["艦船名称"]);
 
+  useEffect(() => {
+    // 艦船を切り替えたら、前の艦船のチェック状態をクリアする。
+    setCheckedMap({});
+  }, [currentName]);
+
   const selectedDetails = useMemo(() => {
     return details.filter((row) => makeKey(row["艦船"]) === currentName);
   }, [currentName]);
@@ -80,6 +220,12 @@ export default function ShipZukanPage() {
   const selectedEnhancements = useMemo(() => {
     return enhancements.filter((row) => makeKey(row["艦船名"]) === currentName);
   }, [currentName]);
+
+  const checkedEnhancements = useMemo(() => {
+    return selectedEnhancements.filter((row, i) => checkedMap[enhancementKey(row, i)]);
+  }, [selectedEnhancements, checkedMap]);
+
+  const applied = useMemo(() => calcAppliedStats(selectedShip, checkedEnhancements), [selectedShip, checkedEnhancements]);
 
   const shipType = makeKey(selectedShip?.["艦船タイプ"]);
   const bgColor = CLASS_COLOR[shipType] || "#ffffff";
@@ -97,26 +243,28 @@ export default function ShipZukanPage() {
   ];
 
   const combatStats = [
-    ["対艦DPM", num(selectedShip?.["対艦DPM"])],
-    ["対空DPM", num(selectedShip?.["対空DPM"])],
-    ["攻城DPM", num(selectedShip?.["攻城DPM"])],
-    ["HP", num(selectedShip?.["HP"])],
-    ["装甲値", num(selectedShip?.["装甲値"])],
-    ["シールド値", num(selectedShip?.["シールド値"])],
-    ["巡航速度", num(selectedShip?.["巡航速度"])],
-    ["ワープ速度", num(selectedShip?.["ワープ速度"])],
+    ["対艦DPM", num(applied.antiShipDpm), num(selectedShip?.["対艦DPM"])],
+    ["対空DPM", num(applied.antiAirDpm), num(selectedShip?.["対空DPM"])],
+    ["攻城DPM", num(applied.siegeDpm), num(selectedShip?.["攻城DPM"])],
+    ["HP", num(applied.hp), num(selectedShip?.["HP"])],
+    ["装甲値", num(applied.armor), num(selectedShip?.["装甲値"])],
+    ["シールド値", num(applied.shield), num(selectedShip?.["シールド値"])],
+    ["巡航速度", num(applied.cruise), num(selectedShip?.["巡航速度"])],
+    ["ワープ速度", num(applied.warp), num(selectedShip?.["ワープ速度"])],
   ];
+
+  const allChecked = selectedEnhancements.length > 0 && selectedEnhancements.every((row, i) => checkedMap[enhancementKey(row, i)]);
 
   return (
     <main
       style={{
         minHeight: "100vh",
         background: "#f3f4f6",
-        padding: 16,
+        padding: 8,
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif',
       }}
     >
-      <div style={{ maxWidth: 1180, margin: "0 auto" }}>
+      <div style={{ width: "100%", maxWidth: "none", margin: 0 }}>
         <div
           style={{
             background: "white",
@@ -150,7 +298,7 @@ export default function ShipZukanPage() {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "330px 1fr", gap: 12, alignItems: "start" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(240px, 320px) minmax(0, 1fr)", gap: 12, alignItems: "start" }}>
           <section style={panelStyle}>
             <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 8 }}>艦船一覧：{filteredShips.length}件</div>
             <div style={{ maxHeight: "72vh", overflow: "auto", display: "grid", gap: 8 }}>
@@ -192,9 +340,12 @@ export default function ShipZukanPage() {
               {mainStats.map(([k, v]) => <Stat key={k} label={k} value={v} />)}
             </div>
 
-            <h3 style={sectionTitle}>性能</h3>
+            <h3 style={sectionTitle}>性能（チェックした強化を反映）</h3>
+            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>
+              選択中の強化：{applied.checkedCount}件 / 消費TP：{applied.totalTp}。下段の「基本値」は強化前の値です。
+            </div>
             <div style={statGrid}>
-              {combatStats.map(([k, v]) => <Stat key={k} label={k} value={v} />)}
+              {combatStats.map(([k, v, base]) => <Stat key={k} label={k} value={v} sub={`基本値：${base}`} />)}
             </div>
 
             <h3 style={sectionTitle}>システム・武装詳細</h3>
@@ -202,13 +353,27 @@ export default function ShipZukanPage() {
               <table style={tableStyle}>
                 <thead>
                   <tr>
-                    {["分類", "システム名", "型名", "役割", "装備数", "ダメージタイプ", "優先目標", "単発", "攻撃回数", "冷却時間", "対艦DPM", "対空DPM", "攻城DPM"].map((h) => <Th key={h}>{h}</Th>)}
+                    <Th compact>分類</Th>
+                    {["システム名", "型名", "役割", "装備数", "ダメージタイプ", "優先目標", "単発", "攻撃回数", "冷却時間", "対艦DPM", "対空DPM", "攻城DPM"].map((h) => <Th key={h}>{h}</Th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {selectedDetails.map((row, i) => (
                     <tr key={i}>
-                      {["分類", "システム名", "型名", "役割", "装備数", "ダメージタイプ", "優先目標", "単発", "攻撃回数", "冷却時間", "対艦DPM", "対空DPM", "攻城DPM"].map((k) => <Td key={k}>{text(row[k])}</Td>)}
+                      <Td compact>
+                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+                          <Image
+                            src={CLASSIFICATION_ICON[String(row["分類"] ?? "")] || "/icons/unknown.png"}
+                            alt={String(row["分類"] ?? "")}
+                            width={24}
+                            height={24}
+                            title={String(row["分類"] ?? "")}
+                          />
+                        </div>
+                      </Td>
+                      {["システム名", "型名", "役割", "装備数", "ダメージタイプ", "優先目標", "単発", "攻撃回数", "冷却時間", "対艦DPM", "対空DPM", "攻城DPM"].map((k) => (
+                        <Td key={k}>{text(row[k])}</Td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>
@@ -216,19 +381,62 @@ export default function ShipZukanPage() {
             </div>
 
             <h3 style={sectionTitle}>強化情報</h3>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+              <button
+                onClick={() => {
+                  const next: Record<string, boolean> = {};
+                  if (!allChecked) selectedEnhancements.forEach((row, i) => { next[enhancementKey(row, i)] = true; });
+                  setCheckedMap(next);
+                }}
+                style={smallButton("#111827")}
+              >
+                {allChecked ? "全チェック解除" : "全強化をチェック"}
+              </button>
+              <button onClick={() => setCheckedMap({})} style={smallButton("#6b7280")}>チェックをリセット</button>
+            </div>
+            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>
+              チェックした強化の「単発・冷却・HP・装甲・シールド・巡航速度・ワープ速度・攻城ダメージ・対空ダメージ」を上の性能欄へ反映します。
+            </div>
             <div style={{ overflowX: "auto" }}>
               <table style={tableStyle}>
                 <thead>
                   <tr>
+                    <Th>反映</Th>
+                    <Th compact>分類</Th>
                     {["システム名", "システム名称", "技術Pt", "効果"].map((h) => <Th key={h}>{h}</Th>)}
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedEnhancements.map((row, i) => (
-                    <tr key={i}>
-                      {["システム名", "システム名称", "技術Pt", "効果"].map((k) => <Td key={k}>{text(row[k])}</Td>)}
-                    </tr>
-                  ))}
+                  {selectedEnhancements.map((row, i) => {
+                    const key = enhancementKey(row, i);
+                    const checked = !!checkedMap[key];
+                    return (
+                      <tr key={key} style={{ background: checked ? "#ecfdf5" : "white" }}>
+                        <Td>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => setCheckedMap((prev) => ({ ...prev, [key]: e.target.checked }))}
+                          />
+                        </Td>
+                        <Td compact>
+                          <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+                            <Image
+                              src={CLASSIFICATION_ICON[String(row["分類"] ?? "")] || "/icons/unknown.png"}
+                              alt={String(row["分類"] ?? "")}
+                              width={24}
+                              height={24}
+                              title={String(row["分類"] ?? "")}
+                            />
+                          </div>
+                        </Td>
+                        <Td>{text(row["システム名"])}</Td>
+                        <Td>{text(row["システム名称"])}</Td>
+                        <Td>{text(row["技術Pt"])}</Td>
+                        <Td>{text(row["効果"])}</Td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -239,21 +447,63 @@ export default function ShipZukanPage() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, background: "#fafafa" }}>
       <div style={{ fontSize: 12, color: "#6b7280" }}>{label}</div>
       <div style={{ fontSize: 15, fontWeight: 800, marginTop: 4 }}>{value}</div>
+      {sub ? <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>{sub}</div> : null}
     </div>
   );
 }
 
-function Th({ children }: { children: React.ReactNode }) {
-  return <th style={{ border: "1px solid #e5e7eb", padding: 8, background: "#f9fafb", whiteSpace: "nowrap", fontSize: 12 }}>{children}</th>;
+function Th({
+  children,
+  compact = false,
+}: {
+  children: React.ReactNode;
+  compact?: boolean;
+}) {
+  return (
+    <th
+      style={{
+        border: "1px solid #e5e7eb",
+        padding: compact ? "4px 6px" : 8,
+        background: "#f9fafb",
+        whiteSpace: "nowrap",
+        fontSize: 12,
+        width: compact ? 40 : "auto",
+        minWidth: compact ? 40 : undefined,
+        textAlign: "center",
+      }}
+    >
+      {children}
+    </th>
+  );
 }
 
-function Td({ children }: { children: React.ReactNode }) {
-  return <td style={{ border: "1px solid #e5e7eb", padding: 8, whiteSpace: "nowrap", fontSize: 12 }}>{children}</td>;
+function Td({
+  children,
+  compact = false,
+}: {
+  children: React.ReactNode;
+  compact?: boolean;
+}) {
+  return (
+    <td
+      style={{
+        border: "1px solid #e5e7eb",
+        padding: compact ? "4px 6px" : 8,
+        whiteSpace: "nowrap",
+        fontSize: 12,
+        width: compact ? 40 : "auto",
+        minWidth: compact ? 40 : undefined,
+        textAlign: compact ? "center" : "left",
+      }}
+    >
+      {children}
+    </td>
+  );
 }
 
 function navButton(bg: string): React.CSSProperties {
@@ -268,6 +518,18 @@ function navButton(bg: string): React.CSSProperties {
   };
 }
 
+function smallButton(bg: string): React.CSSProperties {
+  return {
+    padding: "8px 10px",
+    background: bg,
+    color: "white",
+    borderRadius: 8,
+    border: "none",
+    fontWeight: "bold",
+    cursor: "pointer",
+  };
+}
+
 const inputStyle: React.CSSProperties = {
   padding: 10,
   border: "1px solid #d1d5db",
@@ -278,8 +540,9 @@ const inputStyle: React.CSSProperties = {
 const panelStyle: React.CSSProperties = {
   background: "white",
   borderRadius: 12,
-  padding: 12,
+  padding: 10,
   boxShadow: "0 10px 25px rgba(0,0,0,0.08)",
+  minWidth: 0,
 };
 
 const sectionTitle: React.CSSProperties = {
