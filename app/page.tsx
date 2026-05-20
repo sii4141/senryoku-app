@@ -1,5 +1,5 @@
 "use client";
-
+// npm run dev
 import { useEffect, useMemo, useState, useRef } from "react";
 import initialData from "@/src/data/data.json";
 import Link from "next/link";
@@ -630,7 +630,14 @@ export default function Home() {
       >
         <h1 style={{ fontSize: 20, fontWeight: "bold", marginBottom: 12 }}>戦力評価アプリ</h1>
         <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 8 }}>横持ちのほうが入力しやすいです</div>
-        <div style={{ marginBottom: 12 }}>
+        <div
+          style={{
+            marginBottom: 12,
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
           <Link
             href="/ranking"
             style={{
@@ -644,6 +651,21 @@ export default function Home() {
             }}
           >
             ランキングページへ
+          </Link>
+
+          <Link
+            href="/ships"
+            style={{
+              display: "inline-block",
+              padding: "10px 14px",
+              background: "#2563eb",
+              color: "white",
+              borderRadius: 10,
+              textDecoration: "none",
+              fontWeight: "bold",
+            }}
+          >
+            艦船図鑑ページへ
           </Link>
         </div>
         {/* 新規ユーザー作成 */}
