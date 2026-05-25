@@ -323,7 +323,7 @@ export default function ShipZukanPage() {
                       cursor: "pointer",
                     }}
                   >
-                    <div style={{ fontWeight: 800, fontSize: 14 }}>{name}</div>
+                    <div style={{ fontWeight: 800, fontSize: 14 , color: "#111827",}}>{name}</div>
                     <div style={{ fontSize: 12, marginTop: 4 }}>{type} / {text(ship["企業"])} / {text(ship["役割"])}</div>
                   </button>
                 );
