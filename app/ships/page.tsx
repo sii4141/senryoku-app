@@ -542,13 +542,26 @@ function Th({
     <th
       style={{
         border: "1px solid #e5e7eb",
-        padding: compact ? "4px 6px" : 8,
+
+        padding: compact ? 0 : 8,
+
         background: "#f9fafb",
         whiteSpace: "nowrap",
-        fontSize: 12,
-        width: compact ? 40 : "auto",
-        minWidth: compact ? 40 : undefined,
+
+        fontSize: compact ? 0 : 12,
+
+        width: compact ? 24 : "auto",
+        minWidth: compact ? 24 : undefined,
+        maxWidth: compact ? 24 : undefined,
+
+        height: compact ? 24 : undefined,
+        minHeight: compact ? 24 : undefined,
+        maxHeight: compact ? 24 : undefined,
+
+        lineHeight: compact ? "24px" : undefined,
+
         textAlign: "center",
+        verticalAlign: "middle",
       }}
     >
       {children}
@@ -567,12 +580,25 @@ function Td({
     <td
       style={{
         border: "1px solid #e5e7eb",
-        padding: compact ? "4px 6px" : 8,
+
+        padding: compact ? 0 : 8,
+
         whiteSpace: "nowrap",
-        fontSize: 12,
-        width: compact ? 40 : "auto",
-        minWidth: compact ? 40 : undefined,
+
+        fontSize: compact ? 0 : 12,
+
+        width: compact ? 24 : "auto",
+        minWidth: compact ? 24 : undefined,
+        maxWidth: compact ? 24 : undefined,
+
+        height: compact ? 24 : undefined,
+        minHeight: compact ? 24 : undefined,
+        maxHeight: compact ? 24 : undefined,
+
+        lineHeight: compact ? "24px" : undefined,
+
         textAlign: compact ? "center" : "left",
+        verticalAlign: "middle",
       }}
     >
       {children}
