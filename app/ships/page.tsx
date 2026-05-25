@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import shipZukan from "@/src/data/ship-zukan.json";
+import shipImageMap from "@/src/data/ship-image-map.json";
 
 type Ship = Record<string, string | number>;
 type Detail = Record<string, string | number>;
@@ -22,7 +24,7 @@ type AppliedStats = {
   totalTp: number;
 };
 
-const data = shipZukan as {
+const data = shipZukan as unknown as {
   ships: Ship[];
   details: Detail[];
   enhancements: Enhancement[];
@@ -31,6 +33,8 @@ const data = shipZukan as {
 const ships = data.ships ?? [];
 const details = data.details ?? [];
 const enhancements = data.enhancements ?? [];
+
+const SHIP_IMAGE_MAP = shipImageMap as unknown as Record<string, string>;
 
 const CLASS_COLOR: Record<string, string> = {
   フリゲート: "#9fc5e8",
@@ -42,6 +46,22 @@ const CLASS_COLOR: Record<string, string> = {
   航空母艦: "#f1c232",
   支援艦: "#cc4125",
   戦艦: "#674ea7",
+};
+
+const CLASSIFICATION_ICON: Record<string, string> = {
+  M武装: "/icons/M_weapon.png",
+  武装: "/icons/weapon.png",
+  M装甲: "/icons/M_armor.png",
+  装甲: "/icons/armor.png",
+  動力: "/icons/engine.png",
+  M指令: "/icons/M_command.png",
+  指令: "/icons/command.png",
+  M補修: "/icons/M_repair.png",
+  補修: "/icons/repair.png",
+  M艦載機: "/icons/M_fighter.png",
+  艦載機: "/icons/fighter.png",
+  Mエネルギー: "/icons/M_energy.png",
+  エネルギー: "/icons/energy.png",
 };
 
 function text(v: unknown) {
@@ -212,6 +232,7 @@ export default function ShipZukanPage() {
 
   const shipType = makeKey(selectedShip?.["艦船タイプ"]);
   const bgColor = CLASS_COLOR[shipType] || "#ffffff";
+  const shipImagePath = SHIP_IMAGE_MAP[currentName];
 
   const mainStats = [
     ["企業", text(selectedShip?.["企業"])],
@@ -243,11 +264,11 @@ export default function ShipZukanPage() {
       style={{
         minHeight: "100vh",
         background: "#f3f4f6",
-        padding: 16,
+        padding: 8,
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif',
       }}
     >
-      <div style={{ maxWidth: 1180, margin: "0 auto" }}>
+      <div style={{ width: "100%", maxWidth: "none", margin: 0 }}>
         <div
           style={{
             background: "white",
@@ -311,10 +332,47 @@ export default function ShipZukanPage() {
           </section>
 
           <section style={panelStyle}>
-            <div style={{ background: bgColor, borderRadius: 12, padding: 14, marginBottom: 12 }}>
-              <h2 style={{ fontSize: 22, margin: 0, fontWeight: 900 }}>{currentName}</h2>
-              <div style={{ fontSize: 13, marginTop: 6 }}>
-                {text(selectedShip?.["企業"])} / {text(selectedShip?.["艦船タイプ"])} / {text(selectedShip?.["役割"])}
+            <div
+              style={{
+                background: bgColor,
+                borderRadius: 12,
+                padding: 14,
+                marginBottom: 12,
+                display: "grid",
+                gridTemplateColumns: shipImagePath ? "420px minmax(0, 1fr)" : "1fr",
+                gap: 14,
+                alignItems: "center",
+              }}
+              className="ship-header"
+            >
+              {shipImagePath ? (
+                <div
+                  style={{
+                    position: "relative",
+                    width: "100%",
+                    aspectRatio: "16 / 9",
+                    background: "rgba(255,255,255,0.45)",
+                    borderRadius: 12,
+                    overflow: "hidden",
+                    border: "1px solid rgba(0,0,0,0.08)",
+                  }}
+                >
+                  <Image
+                    src={shipImagePath}
+                    alt={currentName}
+                    fill
+                    sizes="(max-width: 768px) 100vw, 420px"
+                    style={{ objectFit: "contain", padding: 0 }}
+                    priority={false}
+                  />
+                </div>
+              ) : null}
+
+              <div style={{ minWidth: 0 }}>
+                <h2 style={{ fontSize: 22, margin: 0, fontWeight: 900 }}>{currentName}</h2>
+                <div style={{ fontSize: 13, marginTop: 6 }}>
+                  {text(selectedShip?.["企業"])} / {text(selectedShip?.["艦船タイプ"])} / {text(selectedShip?.["役割"])}
+                </div>
               </div>
             </div>
 
@@ -336,13 +394,27 @@ export default function ShipZukanPage() {
               <table style={tableStyle}>
                 <thead>
                   <tr>
-                    {["分類", "システム名", "型名", "役割", "装備数", "ダメージタイプ", "優先目標", "単発", "攻撃回数", "冷却時間", "対艦DPM", "対空DPM", "攻城DPM"].map((h) => <Th key={h}>{h}</Th>)}
+                    <Th compact>分類</Th>
+                    {["システム名", "型名", "役割", "装備数", "ダメージタイプ", "優先目標", "単発", "攻撃回数", "冷却時間", "対艦DPM", "対空DPM", "攻城DPM"].map((h) => <Th key={h}>{h}</Th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {selectedDetails.map((row, i) => (
                     <tr key={i}>
-                      {["分類", "システム名", "型名", "役割", "装備数", "ダメージタイプ", "優先目標", "単発", "攻撃回数", "冷却時間", "対艦DPM", "対空DPM", "攻城DPM"].map((k) => <Td key={k}>{text(row[k])}</Td>)}
+                      <Td compact>
+                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+                          <Image
+                            src={CLASSIFICATION_ICON[String(row["分類"] ?? "")] || "/icons/unknown.png"}
+                            alt={String(row["分類"] ?? "")}
+                            width={24}
+                            height={24}
+                            title={String(row["分類"] ?? "")}
+                          />
+                        </div>
+                      </Td>
+                      {["システム名", "型名", "役割", "装備数", "ダメージタイプ", "優先目標", "単発", "攻撃回数", "冷却時間", "対艦DPM", "対空DPM", "攻城DPM"].map((k) => (
+                        <Td key={k}>{text(row[k])}</Td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>
@@ -370,7 +442,9 @@ export default function ShipZukanPage() {
               <table style={tableStyle}>
                 <thead>
                   <tr>
-                    {["反映", "分類", "システム名", "システム名称", "技術Pt", "効果"].map((h) => <Th key={h}>{h}</Th>)}
+                    <Th>反映</Th>
+                    <Th compact>分類</Th>
+                    {["システム名", "システム名称", "技術Pt", "効果"].map((h) => <Th key={h}>{h}</Th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -386,9 +460,21 @@ export default function ShipZukanPage() {
                             onChange={(e) => setCheckedMap((prev) => ({ ...prev, [key]: e.target.checked }))}
                           />
                         </Td>
-                        {["分類", "システム名", "システム名称", "技術Pt", "効果"].map((k) => (
-                          <Td key={k}>{text(row[k])}</Td>
-                        ))}
+                        <Td compact>
+                          <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+                            <Image
+                              src={CLASSIFICATION_ICON[String(row["分類"] ?? "")] || "/icons/unknown.png"}
+                              alt={String(row["分類"] ?? "")}
+                              width={24}
+                              height={24}
+                              title={String(row["分類"] ?? "")}
+                            />
+                          </div>
+                        </Td>
+                        <Td>{text(row["システム名"])}</Td>
+                        <Td>{text(row["システム名称"])}</Td>
+                        <Td>{text(row["技術Pt"])}</Td>
+                        <Td>{text(row["効果"])}</Td>
                       </tr>
                     );
                   })}
@@ -421,6 +507,10 @@ export default function ShipZukanPage() {
             grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
           }
 
+          .ship-header {
+            grid-template-columns: 1fr !important;
+          }
+
           table {
             font-size: 11px;
           }
@@ -441,12 +531,53 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
-function Th({ children }: { children: React.ReactNode }) {
-  return <th style={{ border: "1px solid #e5e7eb", padding: 8, background: "#f9fafb", whiteSpace: "nowrap", fontSize: 12 }}>{children}</th>;
+function Th({
+  children,
+  compact = false,
+}: {
+  children: React.ReactNode;
+  compact?: boolean;
+}) {
+  return (
+    <th
+      style={{
+        border: "1px solid #e5e7eb",
+        padding: compact ? "4px 6px" : 8,
+        background: "#f9fafb",
+        whiteSpace: "nowrap",
+        fontSize: 12,
+        width: compact ? 40 : "auto",
+        minWidth: compact ? 40 : undefined,
+        textAlign: "center",
+      }}
+    >
+      {children}
+    </th>
+  );
 }
 
-function Td({ children }: { children: React.ReactNode }) {
-  return <td style={{ border: "1px solid #e5e7eb", padding: 8, whiteSpace: "nowrap", fontSize: 12 }}>{children}</td>;
+function Td({
+  children,
+  compact = false,
+}: {
+  children: React.ReactNode;
+  compact?: boolean;
+}) {
+  return (
+    <td
+      style={{
+        border: "1px solid #e5e7eb",
+        padding: compact ? "4px 6px" : 8,
+        whiteSpace: "nowrap",
+        fontSize: 12,
+        width: compact ? 40 : "auto",
+        minWidth: compact ? 40 : undefined,
+        textAlign: compact ? "center" : "left",
+      }}
+    >
+      {children}
+    </td>
+  );
 }
 
 function navButton(bg: string): React.CSSProperties {
@@ -483,8 +614,9 @@ const inputStyle: React.CSSProperties = {
 const panelStyle: React.CSSProperties = {
   background: "white",
   borderRadius: 12,
-  padding: 12,
+  padding: 10,
   boxShadow: "0 10px 25px rgba(0,0,0,0.08)",
+  minWidth: 0,
 };
 
 const sectionTitle: React.CSSProperties = {
