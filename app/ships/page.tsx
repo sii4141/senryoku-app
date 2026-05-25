@@ -486,6 +486,18 @@ export default function ShipZukanPage() {
       </div>
 
       <style jsx global>{`
+        html {
+          -webkit-text-size-adjust: 100%;
+          text-size-adjust: 100%;
+        }
+
+        table,
+        th,
+        td {
+          -webkit-text-size-adjust: 100%;
+          text-size-adjust: 100%;
+        }
+
         @media (max-width: 768px) {
           main {
             padding: 4px !important;
