@@ -442,7 +442,7 @@ export default function ShipZukanPage() {
               <table style={tableStyle}>
                 <thead>
                   <tr>
-                    <Th>反映</Th>
+                    <Th>強化</Th>
                     <Th compact>分類</Th>
                     {["システム名", "システム名称", "技術Pt", "効果"].map((h) => <Th key={h}>{h}</Th>)}
                   </tr>
@@ -581,7 +581,7 @@ function Td({
       style={{
         border: "1px solid #e5e7eb",
 
-        padding: compact ? 0 : 8,
+        padding: compact ? 0 : "0px 8px",
 
         whiteSpace: "nowrap",
 
