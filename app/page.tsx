@@ -806,6 +806,7 @@ export default function Home() {
                       background: "transparent",
                       border: "none",
                       cursor: "pointer",
+                      color: "#111827",
                       fontWeight: active ? "bold" : "normal",
                     }}
                   >
