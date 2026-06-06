@@ -626,11 +626,37 @@ export default function Home() {
 
     try {
       await apiUpsertOwn(user, item.name, nextOwned);
-      await apiWriteLog(
-        user,
-        "所持変更",
-        `${item.name} を ${nextOwned ? "所持" : "未所持"} に変更`
-      );
+      async function apiWriteLog(
+        userName: string,
+        operation: string,
+        detail: string
+      ) {
+        try {
+          const res = await fetch("/api/log", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userName,
+              operation,
+              detail,
+              page: "home",
+              timestamp: new Date().toISOString(),
+              userAgent:
+                typeof navigator !== "undefined"
+                  ? navigator.userAgent
+                  : "",
+            }),
+          });
+
+          const data = await res.json();
+
+          console.log("log response", data);
+        } catch (e) {
+          console.error("操作ログ保存失敗:", e);
+        }
+      }
     } catch (e) {
       console.error("GAS同期失敗(own)", e);
     }
