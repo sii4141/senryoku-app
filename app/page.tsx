@@ -218,6 +218,27 @@ export default function Home() {
     return await res.json();
   }
 
+
+  // ---------- 操作ログをサーバー側のテキストファイルへ保存 ----------
+  async function apiWriteLog(userName: string, operation: string, detail: string) {
+    try {
+      await fetch("/api/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userName,
+          operation,
+          detail,
+          page: "home",
+          timestamp: new Date().toISOString(),
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+        }),
+      });
+    } catch (e) {
+      console.error("操作ログ保存失敗:", e);
+    }
+  }
+
   // ---------- 起動時：localStorage（軽い復元） ----------
   useEffect(() => {
     try {
@@ -577,6 +598,7 @@ export default function Home() {
 
     try {
       await apiDeleteUser(n);
+      await apiWriteLog(n, "ユーザー削除", `ユーザー「${n}」を削除`);
     } catch (e) {
       console.error("deleteUser failed:", e);
     }
@@ -604,6 +626,11 @@ export default function Home() {
 
     try {
       await apiUpsertOwn(user, item.name, nextOwned);
+      await apiWriteLog(
+        user,
+        "所持変更",
+        `${item.name} を ${nextOwned ? "所持" : "未所持"} に変更`
+      );
     } catch (e) {
       console.error("GAS同期失敗(own)", e);
     }
@@ -667,6 +694,22 @@ export default function Home() {
           >
             艦船図鑑ページへ
           </Link>
+
+
+          <Link
+            href="/logs"
+            style={{
+              display: "inline-block",
+              padding: "10px 14px",
+              background: "#047857",
+              color: "white",
+              borderRadius: 10,
+              textDecoration: "none",
+              fontWeight: "bold",
+            }}
+          >
+            操作履歴を見る
+          </Link>
         </div>
         {/* 新規ユーザー作成 */}
         <div style={{ marginBottom: 12, border: "1px solid #e5e7eb", borderRadius: 12, padding: 10 }}>
@@ -692,6 +735,7 @@ export default function Home() {
                 // ✅ 新規のときだけGASへ作成
                 try {
                   await apiCreateUser(u);
+                  await apiWriteLog(u, "ユーザー作成", `ユーザー「${u}」を作成`);
                 } catch (e) {
                   console.error("GASユーザー作成失敗", e);
                   alert("スプレッドシート側にユーザー名を書けませんでした（B3:B149が埋まっている可能性）");
@@ -974,6 +1018,7 @@ export default function Home() {
 
                           try {
                             await apiUpsertPt(selectedUser, s, null); // ← nullでclear（api側対応必須）
+                            await apiWriteLog(selectedUser, "設計図Ptクリア", `${s} のPtを空欄に変更`);
                           } catch (err) {
                             console.error("GAS同期失敗(pt)", err);
                           }
@@ -998,6 +1043,7 @@ export default function Home() {
 
                         try {
                           await apiUpsertPt(selectedUser, s, val);
+                          await apiWriteLog(selectedUser, "設計図Pt変更", `${s} を ${val} Pt に変更`);
                         } catch (err) {
                           console.error("GAS同期失敗(pt)", err);
                         }
@@ -1095,6 +1141,7 @@ export default function Home() {
 
                           try {
                             await apiUpsertUnusedPt(selectedUser, cls, null); // ← nullでclear（api側対応必須）
+                            await apiWriteLog(selectedUser, "未使用Ptクリア", `${cls} の未使用Ptを空欄に変更`);
                           } catch (err) {
                             console.error("GAS同期失敗(unused)", err);
                           }
@@ -1119,6 +1166,7 @@ export default function Home() {
 
                         try {
                           await apiUpsertUnusedPt(selectedUser, cls, val);
+                          await apiWriteLog(selectedUser, "未使用Pt変更", `${cls} を ${val} Pt に変更`);
                         } catch (err) {
                           console.error("GAS同期失敗(unused)", err);
                         }
