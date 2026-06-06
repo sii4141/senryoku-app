@@ -169,7 +169,7 @@ export default function Home() {
   // ---------- 操作ログをスプレッドシートへ保存（/api/gas 経由） ----------
   async function apiWriteLog(userName: string, operation: string, detail: string) {
     try {
-      await gasPost({
+      const result = await gasPost({
         action: "logAction",
         userName,
         operation,
@@ -178,6 +178,9 @@ export default function Home() {
         timestamp: new Date().toISOString(),
         userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
       });
+
+      console.log("操作ログ保存結果:", result);
+      return result;
     } catch (e) {
       console.error("操作ログ保存失敗:", e);
     }
@@ -1235,7 +1238,7 @@ export default function Home() {
           userSelect: "none",
         }}
       >
-        v1.15
+        v1.16
 </div>
 
     </main>
