@@ -101,7 +101,6 @@ export default function LogsPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="初期値: senryoku"
               style={{ flex: 1, minWidth: 220, padding: 10, border: "1px solid #d1d5db", borderRadius: 8 }}
             />
             <button
