@@ -63,7 +63,16 @@ function formatPercent(value: number, total: number) {
   if (total <= 0) return "0.0%";
   return `${((value / total) * 100).toFixed(1)}%`;
 }
+function getShipClassTextColor(shipClass: string) {
+  switch (shipClass) {
+    case "巡洋戦艦":
+    case "支援艦":
+      return "#111827"; // 黒文字
 
+    default:
+      return "#111827"; // その他も黒文字
+  }
+}
 export default function UserDetailPage() {
   const params = useParams<{ userName: string }>();
   const userName = decodeURIComponent(params.userName || "");
@@ -233,41 +242,82 @@ export default function UserDetailPage() {
               <ClassPieChart rows={classRows} grandTotal={grandTotal} />
 
               <div style={{ overflowX: "auto", marginTop: 18 }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    minWidth: 560,
+                  }}
+                >
                   <thead>
                     <tr style={{ background: "#111827", color: "white" }}>
                       <th style={thStyle}>艦種</th>
                       <th style={{ ...thStyle, textAlign: "right" }}>設計図Pt</th>
                       <th style={{ ...thStyle, textAlign: "right" }}>未使用Pt</th>
                       <th style={{ ...thStyle, textAlign: "right" }}>合計Pt</th>
-                      <th style={{ ...thStyle, textAlign: "right" }}>割合</th>
-                      <th style={{ ...thStyle, minWidth: 220 }}>比率</th>
                     </tr>
                   </thead>
+
                   <tbody>
                     {classRows.map(({ cls, blueprintPt, unusedPt, totalPt }) => {
-                      const percent = grandTotal > 0 ? (totalPt / grandTotal) * 100 : 0;
+                      const percent =
+                        grandTotal > 0 ? (totalPt / grandTotal) * 100 : 0;
+
+                      const backgroundColor =
+                        CLASS_COLOR[cls] || "#ffffff";
+
+                      const textColor = getShipClassTextColor(cls);
+
                       return (
-                        <tr key={cls} style={{ borderBottom: "1px solid #e5e7eb" }}>
-                          <td style={{ ...tdStyle, fontWeight: 800 }}>{cls}</td>
-                          <td style={{ ...tdStyle, textAlign: "right" }}>{blueprintPt.toLocaleString()}</td>
-                          <td style={{ ...tdStyle, textAlign: "right" }}>{unusedPt.toLocaleString()}</td>
-                          <td style={{ ...tdStyle, textAlign: "right", fontWeight: 800 }}>
+                        <tr
+                          key={cls}
+                          style={{
+                            borderBottom: "1px solid #ffffff",
+                          }}
+                        >
+                          <td
+                            style={{
+                              ...tdStyle,
+                              fontWeight: 800,
+                              background: backgroundColor,
+                              color: textColor,
+                            }}
+                          >
+                            {cls}
+                          </td>
+
+                          <td
+                            style={{
+                              ...tdStyle,
+                              textAlign: "right",
+                              background: backgroundColor,
+                              color: textColor,
+                            }}
+                          >
+                            {blueprintPt.toLocaleString()}
+                          </td>
+
+                          <td
+                            style={{
+                              ...tdStyle,
+                              textAlign: "right",
+                              background: backgroundColor,
+                              color: textColor,
+                            }}
+                          >
+                            {unusedPt.toLocaleString()}
+                          </td>
+
+                          <td
+                            style={{
+                              ...tdStyle,
+                              textAlign: "right",
+                              fontWeight: 800,
+                              background: backgroundColor,
+                              color: textColor,
+                            }}
+                          >
                             {totalPt.toLocaleString()}
-                          </td>
-                          <td style={{ ...tdStyle, textAlign: "right", fontWeight: 700 }}>
-                            {percent.toFixed(1)}%
-                          </td>
-                          <td style={tdStyle}>
-                            <div style={{ height: 14, background: "#e5e7eb", borderRadius: 999, overflow: "hidden" }}>
-                              <div
-                                style={{
-                                  height: "100%",
-                                  width: `${Math.min(100, Math.max(0, percent))}%`,
-                                  background: CLASS_COLOR[cls] || "#2563eb",
-                                }}
-                              />
-                            </div>
                           </td>
                         </tr>
                       );
@@ -280,7 +330,7 @@ export default function UserDetailPage() {
             <section style={{ ...cardStyle, marginBottom: 16 }}>
               <h2 style={sectionTitleStyle}>設計図ごとのポイント</h2>
               <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 650 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
                   <thead>
                     <tr style={{ background: "#111827", color: "white" }}>
                       <th style={thStyle}>設計図シリーズ</th>
@@ -303,9 +353,7 @@ export default function UserDetailPage() {
                               width: 800,
                               fontWeight: 700,
                               background: CLASS_COLOR[row.shipClass] || "#ffffff",
-                              color: getReadableTextColor(
-                                CLASS_COLOR[row.shipClass] || "#ffffff"
-                              ),
+                              color: getShipClassTextColor(row.shipClass),
                             }}
                           >
                             {row.series}
