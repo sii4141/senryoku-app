@@ -839,6 +839,21 @@ export default function Home() {
                   >
                     {name}
                   </button>
+                  <Link
+                    href={`/user/${encodeURIComponent(name)}`}
+                    style={{
+                      padding: "6px 9px",
+                      borderRadius: 8,
+                      background: "#2563eb",
+                      color: "white",
+                      textDecoration: "none",
+                      fontSize: 12,
+                      fontWeight: "bold",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    詳細
+                  </Link>
                 </div>
               );
             })}

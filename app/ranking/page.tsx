@@ -201,9 +201,12 @@ export default function RankingPage() {
                             fontWeight: index < 3 ? "bold" : "normal",
                             }}
                         >
-                            <div>
-                            {index + 1}位 {row.user}
-                            </div>
+                            <Link
+                              href={`/user/${encodeURIComponent(row.user)}`}
+                              style={{ color: "inherit", textDecoration: "underline", textUnderlineOffset: 3 }}
+                            >
+                              {index + 1}位 {row.user}
+                            </Link>
                             <div>{row.pt}</div>
                         </div>
                         );
