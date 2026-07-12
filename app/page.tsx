@@ -1238,7 +1238,7 @@ export default function Home() {
           userSelect: "none",
         }}
       >
-        v1.16
+        v1.17
 </div>
 
     </main>
