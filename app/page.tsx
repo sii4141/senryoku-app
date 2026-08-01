@@ -635,6 +635,62 @@ export default function Home() {
     }
   }
 
+  async function addSeriesPoints(series: string, amount: number) {
+    if (!selectedUser) return;
+
+    const draft = seriesDraftByUser[selectedUser]?.[series];
+    const saved = seriesPointsByUser[selectedUser]?.[series];
+    const current = draft !== undefined && draft.trim() !== "" ? clampInt(draft) : (saved ?? 0);
+    const next = Math.max(0, current + amount);
+
+    setSeriesPointsByUser((prev) => ({
+      ...prev,
+      [selectedUser]: { ...(prev[selectedUser] || {}), [series]: next },
+    }));
+    setSeriesDraftByUser((prev) => {
+      const nextDrafts = { ...prev };
+      const userDrafts = { ...(nextDrafts[selectedUser] || {}) };
+      delete userDrafts[series];
+      nextDrafts[selectedUser] = userDrafts;
+      return nextDrafts;
+    });
+
+    try {
+      await apiUpsertPt(selectedUser, series, next);
+      await apiWriteLog(selectedUser, "設計図Pt変更", `${series} を ${next} Pt に変更（${amount > 0 ? "+" : ""}${amount}）`);
+    } catch (e) {
+      console.error("GAS同期失敗(pt)", e);
+    }
+  }
+
+  async function addUnusedPoints(cls: UnusedClass, amount: number) {
+    if (!selectedUser) return;
+
+    const draft = unusedDraftByUser[selectedUser]?.[cls];
+    const saved = unusedPointsByUser[selectedUser]?.[cls];
+    const current = draft !== undefined && draft.trim() !== "" ? clampInt(draft) : (saved ?? 0);
+    const next = Math.max(0, current + amount);
+
+    setUnusedPointsByUser((prev) => ({
+      ...prev,
+      [selectedUser]: { ...(prev[selectedUser] || {}), [cls]: next },
+    }));
+    setUnusedDraftByUser((prev) => {
+      const nextDrafts = { ...prev };
+      const userDrafts = { ...(nextDrafts[selectedUser] || {}) };
+      delete userDrafts[cls];
+      nextDrafts[selectedUser] = userDrafts;
+      return nextDrafts;
+    });
+
+    try {
+      await apiUpsertUnusedPt(selectedUser, cls, next);
+      await apiWriteLog(selectedUser, "未使用Pt変更", `${cls} を ${next} Pt に変更（${amount > 0 ? "+" : ""}${amount}）`);
+    } catch (e) {
+      console.error("GAS同期失敗(unused)", e);
+    }
+  }
+
   return (
     <main
       style={{
@@ -975,6 +1031,24 @@ export default function Home() {
                   >
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{s}</div>
 
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => void addSeriesPoints(s, -5)}
+                      style={{
+                        padding: "8px 9px",
+                        border: "1px solid #dc2626",
+                        borderRadius: 10,
+                        background: "#dc2626",
+                        color: "white",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                      aria-label={`${s}のポイントを5減らす`}
+                    >
+                      -5
+                    </button>
                     <input
                       type="number"
                       inputMode="numeric"
@@ -1055,6 +1129,24 @@ export default function Home() {
                         
                       }}
                     />
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => void addSeriesPoints(s, 5)}
+                      style={{
+                        padding: "8px 9px",
+                        border: "1px solid #2563eb",
+                        borderRadius: 10,
+                        background: "#2563eb",
+                        color: "white",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                      aria-label={`${s}のポイントを5増やす`}
+                    >
+                      +5
+                    </button>
+                    </div>
                   </div>
                 );
               })}
@@ -1098,6 +1190,24 @@ export default function Home() {
                   >
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{cls}</div>
 
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => void addUnusedPoints(cls, -5)}
+                      style={{
+                        padding: "8px 9px",
+                        border: "1px solid #dc2626",
+                        borderRadius: 10,
+                        background: "#dc2626",
+                        color: "white",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                      aria-label={`${cls}の未使用ポイントを5減らす`}
+                    >
+                      -5
+                    </button>
                     <input
                       type="number"
                       inputMode="numeric"
@@ -1177,6 +1287,24 @@ export default function Home() {
                         textAlign: "right",
                       }}
                     />
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => void addUnusedPoints(cls, 5)}
+                      style={{
+                        padding: "8px 9px",
+                        border: "1px solid #2563eb",
+                        borderRadius: 10,
+                        background: "#2563eb",
+                        color: "white",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                      aria-label={`${cls}の未使用ポイントを5増やす`}
+                    >
+                      +5
+                    </button>
+                    </div>
                   </div>
                 );
               })}
