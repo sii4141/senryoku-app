@@ -1004,7 +1004,7 @@ export default function Home() {
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
           ) : (
-            <div ref={refSeriesBox}style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 220, overflow: "auto" }}>
+            <div ref={refSeriesBox} className="point-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 220, overflow: "auto" }}>
               {SERIES_NAMES.map((s) => {
                 const cls = CLASS_BY_SERIES[s];
                 const bgColor = CLASS_COLOR[cls] || "#ffffff";
@@ -1018,6 +1018,7 @@ export default function Home() {
                   
                   <div
                     key={s}
+                    className="point-row"
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
@@ -1029,9 +1030,9 @@ export default function Home() {
                       background: bgColor,
                     }}
                   >
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{s}</div>
+                    <div className="point-name" style={{ fontSize: 13, fontWeight: 600 }}>{s}</div>
 
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                    <div className="point-actions" style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                     <button
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
@@ -1165,7 +1166,7 @@ export default function Home() {
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
           ) : (
-            <div ref={refUnusedBox}style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 220, overflow: "auto" }}>
+            <div ref={refUnusedBox} className="point-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 220, overflow: "auto" }}>
               {UNUSED_CLASSES.map((cls) => {
                 const bgColor = CLASS_COLOR[cls] || "#ffffff";
                 const saved = unusedPointsByUser[selectedUser]?.[cls]; // number | undefined
@@ -1177,6 +1178,7 @@ export default function Home() {
                 return (
                   <div
                     key={cls}
+                    className="point-row"
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
@@ -1188,9 +1190,9 @@ export default function Home() {
                       background: bgColor,
                     }}
                   >
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{cls}</div>
+                    <div className="point-name" style={{ fontSize: 13, fontWeight: 600 }}>{cls}</div>
 
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                    <div className="point-actions" style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                     <button
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
@@ -1383,6 +1385,28 @@ export default function Home() {
       >
         v1.182
 </div>
+
+      <style jsx>{`
+        @media (max-width: 700px) {
+          .point-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+            max-height: 320px !important;
+          }
+
+          .point-row {
+            min-width: 0;
+          }
+
+          .point-name {
+            min-width: 0;
+            overflow-wrap: anywhere;
+          }
+
+          .point-actions {
+            margin-left: auto;
+          }
+        }
+      `}</style>
 
     </main>
   );
