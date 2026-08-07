@@ -702,10 +702,12 @@ export default function Home() {
     >
       <div
         style={{
+          width: "100%",
           maxWidth: 760,
           margin: "0 auto",
           background: "white",
           padding: 16,
+          boxSizing: "border-box",
           borderRadius: 12,
           boxShadow: "0 10px 25px rgba(0,0,0,0.08)",
         }}
@@ -864,7 +866,7 @@ export default function Home() {
           <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>ユーザー数：{Object.keys(users || {}).length}人</div>
 
           {/* 一覧（削除ボタン付き） */}
-          <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
             {filteredUserNames.map((name) => {
               const active = name === selectedUser;
               return (
@@ -879,6 +881,8 @@ export default function Home() {
                     justifyContent: "space-between",
                     gap: 8,
                     alignItems: "center",
+                    minWidth: 0,
+                    boxSizing: "border-box",
                   }}
                 >
                   <button
@@ -891,6 +895,8 @@ export default function Home() {
                       cursor: "pointer",
                       color: "#111827",
                       fontWeight: active ? "bold" : "normal",
+                      minWidth: 0,
+                      overflowWrap: "anywhere",
                     }}
                   >
                     {name}
@@ -1383,7 +1389,7 @@ export default function Home() {
           userSelect: "none",
         }}
       >
-        v1.182
+        v1.183
 </div>
 
       <style jsx>{`
