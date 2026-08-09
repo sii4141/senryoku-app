@@ -1389,7 +1389,7 @@ export default function Home() {
           userSelect: "none",
         }}
       >
-        v1.183
+        v1.184
 </div>
 
       <style jsx>{`
