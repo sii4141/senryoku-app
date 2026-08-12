@@ -233,6 +233,7 @@ export const MASTER_ORDER: string[] = [
   "マーシャル クルックス級-武装航空母艦",
   "エターナルヘブン級-UAV航空母艦",
   "ソーラーホエール-武装戦略航空母艦",
+  "サンダーボルトの輝き-UAV航空母艦",
   "天枢級-支援航空母艦",
   "FSV830-高速戦術支援艦",
   "エディアカラ級-重量級火力支援艦",
@@ -350,6 +351,16 @@ export const MASTER_ORDER: string[] = [
   "C1-艦載機プラットフォーム(太陽鯨)",
   "C2-攻城UAVシステム(太陽鯨)",
   "C3-対空ミサイルプラットフォーム(太陽鯨)",
+  "M2-戦術支援プラットフォームⅡ型(輝き)",
+  "M3-戦術支援プラットフォームⅢ型",
+  "A2-大型護送艦ドッグ(輝き)",
+  "A3-大型艦載機システム(輝き)",
+  "B1-(輝き)",
+  "B2-(輝き)",
+  "B3-(輝き)",
+  "C1-(輝き)",
+  "C2-(輝き)",
+  "C3-(輝き)",
   "M2-連合作戦プラットフォームⅡ(天枢)",
   "A2-「北斗Ⅱ型」UAV補修システム(天枢)",
   "A3-「北斗Ⅲ型」UAV補修システム(天枢)",
@@ -479,6 +490,7 @@ export const SERIES_NAMES: string[] = [
   "マーシャル クルックス級",
   "エターナルヘブン級",
   "ソーラーホエール",
+  "サンダーボルトの輝き",
   "天枢級",
   "FSV830",
   "エディアカラ級",
@@ -613,6 +625,7 @@ export const CLASS_BY_SERIES: Record<string, ShipClass> = {
   "マーシャル クルックス級": "航空母艦",
   "エターナルヘブン級": "航空母艦",
   "ソーラーホエール": "航空母艦",
+  "サンダーボルトの輝き": "航空母艦",
   "天枢級": "航空母艦",
   
   "FSV830": "支援艦",
@@ -636,9 +649,10 @@ export function guessSeries(shipName: string): string | "" {
   if (n.includes("(天権)")) return "天権級";
   
   if (n.includes("(CV3000)")) return "CV3000級";
-  if (n.includes("(太陽鯨)")) return "ソーラーホエール";
   if (n.includes("(マーシャル)")) return "マーシャル クルックス級";
   if (n.includes("(エタヘブ)")) return "エターナルヘブン級";
+  if (n.includes("(太陽鯨)")) return "ソーラーホエール";
+  if (n.includes("(輝き)")) return "サンダーボルトの輝き";
   if (n.includes("(天枢)")) return "天枢級";
   
   if (n.includes("(FSV)")) return "FSV830";
@@ -664,9 +678,10 @@ function isModuleName(name: string) {
     s.includes("(アーミジャ)") ||
     s.includes("(天権)") ||
     s.includes("(CV3000)") ||
-    s.includes("(太陽鯨)") ||
     s.includes("(マーシャル)") ||
     s.includes("(エタヘブ)") ||
+    s.includes("(太陽鯨)") ||
+    s.includes("(輝き)") ||
     s.includes("(天枢)") ||
     s.includes("(FSV)") ||
     s.includes("(エディ)") ||
@@ -692,9 +707,10 @@ export function classifyByName(shipName: string): ShipClass {
     }
     if (
       s.includes("(CV3000)") ||
-      s.includes("(太陽鯨)") ||
       s.includes("(マーシャル)") ||
       s.includes("(エタヘブ)") ||
+      s.includes("(太陽鯨)") ||
+      s.includes("(輝き)") ||
       s.includes("(天枢)")
     ) {
       return "航空母艦モジュール";
