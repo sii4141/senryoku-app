@@ -196,11 +196,19 @@ export default function Home() {
   }
 
 
-  async function apiUpsertOwn(userName: string, shipName: string, own: boolean) {
+  async function apiUpsertOwn(
+    userName: string,
+    shipName: string,
+    shipType: string,
+    series: string,
+    own: boolean
+  ) {
     return await gasPost({
       action: "upsertOwn",
       userName,
       shipName,
+      shipType,
+      series,
       own: own ? 1 : 0,
     });
   }
@@ -613,9 +621,13 @@ export default function Home() {
   // ---------- 所持トグル ----------
   async function toggleOwned(user: string, item: OwnedItem) {
     const key = normalize(item.name);
-
-    const has = (users[user] || []).some((x) => normalize(x.name) === key);
+    const currentList = users[user] || [];
+    const has = currentList.some((x) => normalize(x.name) === key);
     const nextOwned = !has;
+    const series = guessSeries(item.name);
+    const alreadyOwnsSeries =
+      series !== "" && currentList.some((ownedItem) => guessSeries(ownedItem.name) === series);
+    const shouldInitializeSeriesPt = nextOwned && series !== "" && !alreadyOwnsSeries;
 
     setUsers((prev) => {
       const list = prev[user] || [];
@@ -623,8 +635,28 @@ export default function Home() {
       return { ...prev, [user]: nextList };
     });
 
+    if (shouldInitializeSeriesPt) {
+      setSeriesPointsByUser((prev) => ({
+        ...prev,
+        [user]: { ...(prev[user] || {}), [series]: 0 },
+      }));
+
+      setSeriesDraftByUser((prev) => {
+        const next = { ...prev };
+        const userDrafts = { ...(next[user] || {}) };
+        delete userDrafts[series];
+        next[user] = userDrafts;
+        return next;
+      });
+    }
+
     try {
-      await apiUpsertOwn(user, item.name, nextOwned);
+      await apiUpsertOwn(user, item.name, item.type, series, nextOwned);
+
+      if (shouldInitializeSeriesPt) {
+        await apiWriteLog(user, "設計図Pt初期化", `${series} を初めて所持したため 0 Pt に設定`);
+      }
+
       await apiWriteLog(
         user,
         "所持変更",
@@ -1389,7 +1421,7 @@ export default function Home() {
           userSelect: "none",
         }}
       >
-        v1.191
+        v1.192
 </div>
 
       <style jsx>{`
