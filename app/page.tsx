@@ -123,6 +123,21 @@ function clampInt(v: string) {
   return n;
 }
 
+function formatJstTimestamp(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}/${values.month}/${values.day} ${values.hour}:${values.minute}:${values.second}`;
+}
+
 function emptyUnusedPoints(): UnusedPointsMap {
   // ✅ 初期値は全部「未入力(=undefined)」にして空欄表示
   return {
@@ -175,7 +190,7 @@ export default function Home() {
         operation,
         detail,
         page: "home",
-        timestamp: new Date().toISOString(),
+        timestamp: formatJstTimestamp(),
         userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
       });
 
