@@ -56,6 +56,14 @@ const CLASS_COLOR: Record<string, string> = {
 type UnusedPointsMap = Partial<Record<UnusedClass, number>>;
 type UnusedPointsByUserMap = Record<string, UnusedPointsMap>;
 
+type PendingOwnershipChange = {
+  userName: string;
+  shipName: string;
+  shipType: string;
+  series: string;
+  own: number;
+};
+
 type ScrollState = {
   winY: number;
   seriesY: number;
@@ -168,12 +176,16 @@ export default function Home() {
   const [shipType, setShipType] = useState<ShipType>("全艦船");
   const [userQuery, setUserQuery] = useState<string>("");
   const [shipQuery, setShipQuery] = useState<string>("");
+  const [ownershipSaveStatus, setOwnershipSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
+  const [ownershipPendingCount, setOwnershipPendingCount] = useState(0);
   const refSeriesBox = useRef<HTMLDivElement | null>(null);
   const refUnusedBox = useRef<HTMLDivElement | null>(null);
   const refOwnedBox = useRef<HTMLDivElement | null>(null);
   const seriesSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const unusedSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const ownershipSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingOwnershipRef = useRef<Map<string, PendingOwnershipChange>>(new Map());
+  const ownershipSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ownershipSavingRef = useRef(false);
 
   // +5/-5を連打したときも、Reactの再描画を待たずに最新値を参照するためのref
   const latestSeriesPointsRef = useRef<Record<string, number>>({});
@@ -260,6 +272,23 @@ export default function Home() {
     }
 
     throw lastError instanceof Error ? lastError : new Error("所有状態の保存に失敗しました");
+  }
+
+  async function apiBatchUpsertOwn(changes: PendingOwnershipChange[]) {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        return await gasPost({ action: "batchUpsertOwn", changes });
+      } catch (error) {
+        lastError = error;
+        if (attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+        }
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error("所有状態の一括保存に失敗しました");
   }
 
   async function apiUpsertPt(userName: string, series: string, pt: number | null) {
@@ -493,7 +522,19 @@ export default function Home() {
     return () => {
       Object.values(seriesSaveTimersRef.current).forEach(clearTimeout);
       Object.values(unusedSaveTimersRef.current).forEach(clearTimeout);
+      if (ownershipSaveTimerRef.current) clearTimeout(ownershipSaveTimerRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      if (pendingOwnershipRef.current.size === 0 && !ownershipSavingRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
   }, []);
 
   // ✅ 選択中ユーザーのPtマップ
@@ -674,24 +715,68 @@ export default function Home() {
     return list.some((x) => normalize(x.name) === key);
   }
 
-  function enqueueOwnershipSave(
-    user: string,
-    item: OwnedItem,
-    series: string,
-    nextOwned: boolean
-  ) {
-    const save = async () => {
-      await apiUpsertOwn(user, item.name, item.type, series, nextOwned);
-      await apiWriteLog(user, "所持変更", `${item.name}：${nextOwned ? "所有" : "未所有"}`);
-    };
+  function scheduleOwnershipSave() {
+    if (ownershipSaveTimerRef.current) clearTimeout(ownershipSaveTimerRef.current);
+    ownershipSaveTimerRef.current = setTimeout(() => {
+      void flushOwnershipChanges();
+    }, 1000);
+  }
 
-    // 連打されてもGASへは必ず1件ずつ順番に送る。
-    ownershipSaveQueueRef.current = ownershipSaveQueueRef.current
-      .then(save, save)
-      .catch((error) => {
-        console.error("所持状態の保存に失敗", error);
-        alert(`${item.name} の所有変更を保存できませんでした。通信状態を確認してもう一度操作してください。`);
+  async function flushOwnershipChanges() {
+    if (ownershipSavingRef.current) return;
+
+    const entries = Array.from(pendingOwnershipRef.current.entries());
+    if (entries.length === 0) return;
+
+    ownershipSaveTimerRef.current = null;
+    entries.forEach(([key]) => pendingOwnershipRef.current.delete(key));
+    setOwnershipPendingCount(pendingOwnershipRef.current.size);
+    ownershipSavingRef.current = true;
+    setOwnershipSaveStatus("saving");
+    let failed = false;
+
+    try {
+      const changes = entries.map(([, change]) => change);
+      await apiBatchUpsertOwn(changes);
+
+      const userNames = Array.from(new Set(changes.map((change) => change.userName)));
+      await apiWriteLog(
+        userNames.length === 1 ? userNames[0] : "複数ユーザー",
+        "所有変更",
+        `${changes.length}件を一括反映`
+      );
+      setOwnershipSaveStatus("saved");
+    } catch (error) {
+      failed = true;
+      entries.forEach(([key, change]) => {
+        if (!pendingOwnershipRef.current.has(key)) {
+          pendingOwnershipRef.current.set(key, change);
+        }
       });
+      setOwnershipPendingCount(pendingOwnershipRef.current.size);
+      setOwnershipSaveStatus("error");
+      console.error("所有状態の一括保存に失敗", error);
+      alert("所有変更を保存できませんでした。ページを閉じず、もう一度所有ボタンを操作してください。");
+    } finally {
+      ownershipSavingRef.current = false;
+      if (pendingOwnershipRef.current.size > 0 && !failed) {
+        scheduleOwnershipSave();
+      }
+    }
+  }
+
+  function enqueueOwnershipSave(user: string, item: OwnedItem, series: string, nextOwned: boolean) {
+    const key = `${user}::${normalize(item.name)}`;
+    pendingOwnershipRef.current.set(key, {
+      userName: user,
+      shipName: item.name,
+      shipType: item.type,
+      series,
+      own: nextOwned ? 1 : 0,
+    });
+    setOwnershipPendingCount(pendingOwnershipRef.current.size);
+    setOwnershipSaveStatus("pending");
+    scheduleOwnershipSave();
   }
 
   // ---------- 所持トグル ----------
@@ -1166,7 +1251,28 @@ export default function Home() {
 
         {/* 所持 */}
         <div className="section-card" style={{ marginBottom: 10 }}>
-          <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>所持モデル・モジュール入力（タップで◯を入力）</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 6 }}>
+            <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 0 }}>所持モデル・モジュール入力（タップで◯を入力）</div>
+            {ownershipSaveStatus !== "idle" && (
+              <div
+                aria-live="polite"
+                style={{
+                  flexShrink: 0,
+                  padding: "5px 9px",
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: ownershipSaveStatus === "error" ? "#991b1b" : "#0d5b69",
+                  background: ownershipSaveStatus === "error" ? "#fee2e2" : "#dff3f6",
+                }}
+              >
+                {ownershipSaveStatus === "pending" && `保存待ち ${ownershipPendingCount}件`}
+                {ownershipSaveStatus === "saving" && "保存中…"}
+                {ownershipSaveStatus === "saved" && "保存済み"}
+                {ownershipSaveStatus === "error" && `未保存 ${ownershipPendingCount}件`}
+              </div>
+            )}
+          </div>
 
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
@@ -1542,7 +1648,7 @@ export default function Home() {
           userSelect: "none",
         }}
       >
-        v1.215
+        v1.216
 </div>
 
       <style jsx>{`
