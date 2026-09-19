@@ -173,6 +173,16 @@ export default function Home() {
   const refUnusedBox = useRef<HTMLDivElement | null>(null);
   const refOwnedBox = useRef<HTMLDivElement | null>(null);
 
+  // +5/-5を連打したときも、Reactの再描画を待たずに最新値を参照するためのref
+  const latestSeriesPointsRef = useRef<Record<string, number>>({});
+  const latestUnusedPointsRef = useRef<Record<string, number>>({});
+
+  // 同じ項目への連続操作をまとめ、最後の値だけGASへ送信するためのタイマー
+  const seriesSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const unusedSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const seriesSaveQueuesRef = useRef<Record<string, Promise<void>>>({});
+  const unusedSaveQueuesRef = useRef<Record<string, Promise<void>>>({});
+
   // ---------- GASへ送る（Nextの /api/gas 経由：CORS回避） ----------
   async function gasPost(payload: Record<string, any>) {
     const res = await fetch("/api/gas", {
@@ -683,60 +693,98 @@ export default function Home() {
     }
   }
 
-  async function addSeriesPoints(series: string, amount: number) {
+  function addSeriesPoints(series: string, amount: number) {
     if (!selectedUser) return;
 
+    const userName = selectedUser;
+    const key = `${userName}::${series}`;
     const draft = seriesDraftByUser[selectedUser]?.[series];
     const saved = seriesPointsByUser[selectedUser]?.[series];
-    const current = draft !== undefined && draft.trim() !== "" ? clampInt(draft) : (saved ?? 0);
+    const current =
+      latestSeriesPointsRef.current[key] ??
+      (draft !== undefined && draft.trim() !== "" ? clampInt(draft) : (saved ?? 0));
     const next = Math.max(0, current + amount);
+
+    // 次のクリックからは、再描画前でもこの値を基準に計算できる
+    latestSeriesPointsRef.current[key] = next;
 
     setSeriesPointsByUser((prev) => ({
       ...prev,
-      [selectedUser]: { ...(prev[selectedUser] || {}), [series]: next },
+      [userName]: { ...(prev[userName] || {}), [series]: next },
     }));
     setSeriesDraftByUser((prev) => {
       const nextDrafts = { ...prev };
-      const userDrafts = { ...(nextDrafts[selectedUser] || {}) };
+      const userDrafts = { ...(nextDrafts[userName] || {}) };
       delete userDrafts[series];
-      nextDrafts[selectedUser] = userDrafts;
+      nextDrafts[userName] = userDrafts;
       return nextDrafts;
     });
 
-    try {
-      await apiUpsertPt(selectedUser, series, next);
-      await apiWriteLog(selectedUser, "設計図Pt変更", `${series} を ${next} Pt に変更（${amount > 0 ? "+" : ""}${amount}）`);
-    } catch (e) {
-      console.error("GAS同期失敗(pt)", e);
-    }
+    // 連打のたびに古いリクエストを取り消し、400ms後に最新値だけ保存する
+    if (seriesSaveTimersRef.current[key]) clearTimeout(seriesSaveTimersRef.current[key]);
+    seriesSaveTimersRef.current[key] = setTimeout(() => {
+      const latest = latestSeriesPointsRef.current[key];
+      const previous = seriesSaveQueuesRef.current[key] ?? Promise.resolve();
+      const queued = previous
+        .catch(() => undefined)
+        .then(async () => {
+          await apiUpsertPt(userName, series, latest);
+          await apiWriteLog(userName, "設計図Pt変更", `${series} を ${latest} Pt に変更`);
+        })
+        .catch((e) => console.error("GAS同期失敗(pt)", e));
+
+      seriesSaveQueuesRef.current[key] = queued;
+      void queued.finally(() => {
+        if (seriesSaveQueuesRef.current[key] === queued) delete seriesSaveQueuesRef.current[key];
+      });
+      delete seriesSaveTimersRef.current[key];
+    }, 400);
   }
 
-  async function addUnusedPoints(cls: UnusedClass, amount: number) {
+  function addUnusedPoints(cls: UnusedClass, amount: number) {
     if (!selectedUser) return;
 
+    const userName = selectedUser;
+    const key = `${userName}::${cls}`;
     const draft = unusedDraftByUser[selectedUser]?.[cls];
     const saved = unusedPointsByUser[selectedUser]?.[cls];
-    const current = draft !== undefined && draft.trim() !== "" ? clampInt(draft) : (saved ?? 0);
+    const current =
+      latestUnusedPointsRef.current[key] ??
+      (draft !== undefined && draft.trim() !== "" ? clampInt(draft) : (saved ?? 0));
     const next = Math.max(0, current + amount);
+
+    latestUnusedPointsRef.current[key] = next;
 
     setUnusedPointsByUser((prev) => ({
       ...prev,
-      [selectedUser]: { ...(prev[selectedUser] || {}), [cls]: next },
+      [userName]: { ...(prev[userName] || {}), [cls]: next },
     }));
     setUnusedDraftByUser((prev) => {
       const nextDrafts = { ...prev };
-      const userDrafts = { ...(nextDrafts[selectedUser] || {}) };
+      const userDrafts = { ...(nextDrafts[userName] || {}) };
       delete userDrafts[cls];
-      nextDrafts[selectedUser] = userDrafts;
+      nextDrafts[userName] = userDrafts;
       return nextDrafts;
     });
 
-    try {
-      await apiUpsertUnusedPt(selectedUser, cls, next);
-      await apiWriteLog(selectedUser, "未使用Pt変更", `${cls} を ${next} Pt に変更（${amount > 0 ? "+" : ""}${amount}）`);
-    } catch (e) {
-      console.error("GAS同期失敗(unused)", e);
-    }
+    if (unusedSaveTimersRef.current[key]) clearTimeout(unusedSaveTimersRef.current[key]);
+    unusedSaveTimersRef.current[key] = setTimeout(() => {
+      const latest = latestUnusedPointsRef.current[key];
+      const previous = unusedSaveQueuesRef.current[key] ?? Promise.resolve();
+      const queued = previous
+        .catch(() => undefined)
+        .then(async () => {
+          await apiUpsertUnusedPt(userName, cls, latest);
+          await apiWriteLog(userName, "未使用Pt変更", `${cls} を ${latest} Pt に変更`);
+        })
+        .catch((e) => console.error("GAS同期失敗(unused)", e));
+
+      unusedSaveQueuesRef.current[key] = queued;
+      void queued.finally(() => {
+        if (unusedSaveQueuesRef.current[key] === queued) delete unusedSaveQueuesRef.current[key];
+      });
+      delete unusedSaveTimersRef.current[key];
+    }, 400);
   }
 
   return (
@@ -1140,6 +1188,12 @@ export default function Home() {
 
                         // 空欄 → クリア（GASもクリア）
                         if (raw.trim() === "") {
+                          const key = `${selectedUser}::${s}`;
+                          latestSeriesPointsRef.current[key] = 0;
+                          if (seriesSaveTimersRef.current[key]) {
+                            clearTimeout(seriesSaveTimersRef.current[key]);
+                            delete seriesSaveTimersRef.current[key];
+                          }
                           setSeriesPointsByUser((prev) => ({
                             ...prev,
                             [selectedUser]: { ...(prev[selectedUser] || {}), [s]: undefined },
@@ -1164,6 +1218,12 @@ export default function Home() {
                         }
 
                         const val = clampInt(raw);
+                        const key = `${selectedUser}::${s}`;
+                        latestSeriesPointsRef.current[key] = val;
+                        if (seriesSaveTimersRef.current[key]) {
+                          clearTimeout(seriesSaveTimersRef.current[key]);
+                          delete seriesSaveTimersRef.current[key];
+                        }
 
                         setSeriesPointsByUser((prev) => ({
                           ...prev,
@@ -1300,6 +1360,12 @@ export default function Home() {
 
                         // 空欄 → クリア（GASもクリア）
                         if (raw.trim() === "") {
+                          const key = `${selectedUser}::${cls}`;
+                          latestUnusedPointsRef.current[key] = 0;
+                          if (unusedSaveTimersRef.current[key]) {
+                            clearTimeout(unusedSaveTimersRef.current[key]);
+                            delete unusedSaveTimersRef.current[key];
+                          }
                           setUnusedPointsByUser((prev) => ({
                             ...prev,
                             [selectedUser]: { ...(prev[selectedUser] || {}), [cls]: undefined as any },
@@ -1324,6 +1390,12 @@ export default function Home() {
                         }
 
                         const val = clampInt(raw);
+                        const key = `${selectedUser}::${cls}`;
+                        latestUnusedPointsRef.current[key] = val;
+                        if (unusedSaveTimersRef.current[key]) {
+                          clearTimeout(unusedSaveTimersRef.current[key]);
+                          delete unusedSaveTimersRef.current[key];
+                        }
 
                         setUnusedPointsByUser((prev) => ({
                           ...prev,
