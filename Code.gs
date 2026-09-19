@@ -78,6 +78,10 @@ function doPost(e) {
       ));
     }
 
+    if (action === "batchUpsertPoints") {
+      return jsonOut_(batchUpsertPoints_(body.changes));
+    }
+
     if (action === "export") {
       return jsonOut_(Object.assign({ ok: true }, export_()));
     }
@@ -192,23 +196,168 @@ function batchUpsertOwn_(changes) {
     return { ok: false, error: "too many ownership changes" };
   }
 
-  const results = changes.map(function (change) {
-    return upsertOwn_(
-      String(change.userName || "").trim(),
-      String(change.shipName || "").trim(),
-      String(change.series || "").trim(),
-      change.own
-    );
+  const sheet = getOwnedSheet_();
+  const lastCol = sheet.getLastColumn();
+  const headers = sheet.getRange(2, 1, 1, lastCol).getDisplayValues()[0];
+  const masterEntries = getMasterEntries_();
+  const masterByName = {};
+
+  masterEntries.forEach(function (entry) {
+    masterByName[normalize_(entry.name)] = entry.colLetter;
   });
 
-  const failed = results.filter(function (result) {
-    return !result || result.ok !== true;
+  // ユーザー行は一括で1回だけ読み込む。
+  const userValues = sheet
+    .getRange(USER_ROW_START, USER_COL, USER_ROW_END - USER_ROW_START + 1, 1)
+    .getDisplayValues();
+  const userRows = {};
+  userValues.forEach(function (row, index) {
+    const userName = String(row[0] || "").trim();
+    if (userName) userRows[userName] = USER_ROW_START + index;
+  });
+
+  const prepared = [];
+  const errors = [];
+  const affectedRows = {};
+
+  changes.forEach(function (change) {
+    const userName = String(change.userName || "").trim();
+    const shipName = String(change.shipName || "").trim();
+    const series = String(change.series || "").trim();
+
+    if (!userName || !shipName) {
+      errors.push({ ok: false, error: "missing userName or shipName", userName: userName, shipName: shipName });
+      return;
+    }
+
+    let row = userRows[userName];
+    if (!row) {
+      row = ensureUserRow_(userName);
+      userRows[userName] = row;
+    }
+
+    const shipColLetter = masterByName[normalize_(shipName)] || "";
+    if (!shipColLetter) {
+      errors.push({ ok: false, error: "ship not found in master", shipName: shipName });
+      return;
+    }
+
+    const isOwned = !(
+      change.own === false || change.own === "false" ||
+      change.own === 0 || change.own === "0" ||
+      change.own === null || typeof change.own === "undefined"
+    );
+    const seriesColLetter = series ? (masterByName[normalize_(series)] || "") : "";
+
+    prepared.push({
+      userName: userName,
+      shipName: shipName,
+      series: series,
+      row: row,
+      shipColLetter: shipColLetter,
+      shipCol: letterToColumn_(shipColLetter),
+      seriesColLetter: seriesColLetter,
+      seriesCol: seriesColLetter ? letterToColumn_(seriesColLetter) : 0,
+      own: isOwned,
+    });
+    affectedRows[row] = true;
+  });
+
+  // 不正な項目が1件でもあれば、部分反映せず全体を失敗させる。
+  if (errors.length > 0) {
+    return { ok: false, error: "invalid ownership changes", failed: errors };
+  }
+
+  // 影響する行だけを読み、変更前と変更後の状態をメモリ上で作る。
+  const beforeRows = {};
+  const afterRows = {};
+  Object.keys(affectedRows).forEach(function (rowKey) {
+    const row = Number(rowKey);
+    const values = sheet.getRange(row, 1, 1, lastCol).getDisplayValues()[0];
+    beforeRows[row] = values;
+    afterRows[row] = values.slice();
+  });
+
+  prepared.forEach(function (change) {
+    afterRows[change.row][change.shipCol - 1] = change.own ? "◯" : "-";
+  });
+
+  const ownedCells = new Set();
+  const unownedCells = new Set();
+  const initializePtCells = new Set();
+  const initializedSeriesKeys = {};
+
+  prepared.forEach(function (change) {
+    const cellA1 = change.shipColLetter + change.row;
+    if (change.own) ownedCells.add(cellA1);
+    else unownedCells.add(cellA1);
+
+    if (!change.own || !change.seriesCol) return;
+
+    const seriesKey = change.row + "::" + change.seriesCol;
+    if (Object.prototype.hasOwnProperty.call(initializedSeriesKeys, seriesKey)) return;
+    initializedSeriesKeys[seriesKey] = false;
+
+    let nextSeriesCol = lastCol + 1;
+    for (let col = change.seriesCol + 1; col <= lastCol; col++) {
+      if (String(headers[col - 1] || "").trim() === "Pt") {
+        nextSeriesCol = col;
+        break;
+      }
+    }
+
+    const startCol = change.seriesCol + 1;
+    const endCol = nextSeriesCol - 1;
+    if (startCol > endCol) return;
+
+    const before = beforeRows[change.row];
+    const after = afterRows[change.row];
+    const ownedBefore = before.slice(startCol - 1, endCol).some(function (value) {
+      return String(value || "").trim() === "◯";
+    });
+    const ownedAfter = after.slice(startCol - 1, endCol).some(function (value) {
+      return String(value || "").trim() === "◯";
+    });
+    const ptIsBlank = String(before[change.seriesCol - 1] || "").trim() === "";
+
+    if (!ownedBefore && ownedAfter && ptIsBlank) {
+      initializePtCells.add(change.seriesColLetter + change.row);
+      initializedSeriesKeys[seriesKey] = true;
+    }
+  });
+
+  // 値ごとにまとめ、スプレッドシートへの書き込み回数を最大3回にする。
+  if (initializePtCells.size > 0) {
+    sheet.getRangeList(Array.from(initializePtCells)).setValue(0);
+  }
+  if (ownedCells.size > 0) {
+    sheet.getRangeList(Array.from(ownedCells)).setValue("◯");
+  }
+  if (unownedCells.size > 0) {
+    sheet.getRangeList(Array.from(unownedCells)).setValue("-");
+  }
+
+  const results = prepared.map(function (change) {
+    const seriesKey = change.row + "::" + change.seriesCol;
+    return {
+      ok: true,
+      row: change.row,
+      colLetter: change.shipColLetter,
+      own: change.own,
+      series: change.series,
+      seriesColLetter: change.seriesColLetter,
+      initializedSeriesPt: initializedSeriesKeys[seriesKey] === true,
+    };
   });
 
   return {
-    ok: failed.length === 0,
+    ok: true,
     processed: results.length,
-    failed: failed,
+    writeOperations:
+      (initializePtCells.size > 0 ? 1 : 0) +
+      (ownedCells.size > 0 ? 1 : 0) +
+      (unownedCells.size > 0 ? 1 : 0),
+    initializedSeriesPtCount: initializePtCells.size,
     results: results,
   };
 }
@@ -279,6 +428,131 @@ function upsertUnusedPt_(userName, cls, pt) {
 
   cell.setValue(parsed);
   return { ok: true, row: row, colLetter: colLetter, pt: parsed, cleared: false };
+}
+
+function batchUpsertPoints_(changes) {
+  if (!Array.isArray(changes) || changes.length === 0) {
+    return { ok: false, error: "empty point changes" };
+  }
+
+  if (changes.length > 500) {
+    return { ok: false, error: "too many point changes" };
+  }
+
+  const sheet = getOwnedSheet_();
+  const masterEntries = getMasterEntries_();
+  const masterByName = {};
+  masterEntries.forEach(function (entry) {
+    masterByName[normalize_(entry.name)] = entry.colLetter;
+  });
+
+  // ユーザー行を1回だけ読み込む。
+  const userValues = sheet
+    .getRange(USER_ROW_START, USER_COL, USER_ROW_END - USER_ROW_START + 1, 1)
+    .getDisplayValues();
+  const userRows = {};
+  userValues.forEach(function (row, index) {
+    const userName = String(row[0] || "").trim();
+    if (userName) userRows[userName] = USER_ROW_START + index;
+  });
+
+  // 同じセルが複数回含まれている場合は最後の値を採用する。
+  const changesByCell = {};
+  const errors = [];
+
+  changes.forEach(function (change) {
+    const kind = String(change.kind || "").trim();
+    const userName = String(change.userName || "").trim();
+    if (!userName) {
+      errors.push({ ok: false, error: "missing userName" });
+      return;
+    }
+
+    let row = userRows[userName];
+    if (!row) {
+      row = ensureUserRow_(userName);
+      userRows[userName] = row;
+    }
+
+    let colLetter = "";
+    let targetName = "";
+
+    if (kind === "series") {
+      targetName = String(change.series || "").trim();
+      colLetter = masterByName[normalize_(targetName)] || "";
+      if (!targetName || !colLetter) {
+        errors.push({ ok: false, error: "series not found in master", series: targetName });
+        return;
+      }
+    } else if (kind === "unused") {
+      targetName = String(change.cls || "").trim();
+      colLetter = UNUSED_PT_COL[targetName] || "";
+      if (!targetName || !colLetter) {
+        errors.push({ ok: false, error: "unknown cls", cls: targetName });
+        return;
+      }
+    } else {
+      errors.push({ ok: false, error: "unknown point kind", kind: kind });
+      return;
+    }
+
+    const parsed = parseNullablePoint_(change.pt);
+    const cellA1 = colLetter + row;
+    changesByCell[cellA1] = {
+      kind: kind,
+      userName: userName,
+      targetName: targetName,
+      row: row,
+      colLetter: colLetter,
+      pt: parsed,
+    };
+  });
+
+  // 不正な項目があれば、部分反映せず全体を失敗させる。
+  if (errors.length > 0) {
+    return { ok: false, error: "invalid point changes", failed: errors };
+  }
+
+  const clearCells = [];
+  const cellsByValue = {};
+  const prepared = Object.keys(changesByCell).map(function (cellA1) {
+    const change = changesByCell[cellA1];
+    if (change.pt === null) {
+      clearCells.push(cellA1);
+    } else {
+      const valueKey = String(change.pt);
+      if (!cellsByValue[valueKey]) cellsByValue[valueKey] = [];
+      cellsByValue[valueKey].push(cellA1);
+    }
+    return change;
+  });
+
+  // 空欄化は1回、同じ数値は値ごとに1回のRangeListでまとめて反映する。
+  if (clearCells.length > 0) {
+    sheet.getRangeList(clearCells).clearContent();
+  }
+  Object.keys(cellsByValue).forEach(function (valueKey) {
+    sheet.getRangeList(cellsByValue[valueKey]).setValue(Number(valueKey));
+  });
+
+  return {
+    ok: true,
+    processed: prepared.length,
+    writeOperations: (clearCells.length > 0 ? 1 : 0) + Object.keys(cellsByValue).length,
+    clearedCount: clearCells.length,
+    results: prepared.map(function (change) {
+      return {
+        ok: true,
+        kind: change.kind,
+        userName: change.userName,
+        targetName: change.targetName,
+        row: change.row,
+        colLetter: change.colLetter,
+        pt: change.pt,
+        cleared: change.pt === null,
+      };
+    }),
+  };
 }
 
 function deleteUser_(userName) {

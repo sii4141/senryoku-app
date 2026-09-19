@@ -64,6 +64,10 @@ type PendingOwnershipChange = {
   own: number;
 };
 
+type PendingPointChange =
+  | { kind: "series"; userName: string; series: string; pt: number | null }
+  | { kind: "unused"; userName: string; cls: UnusedClass; pt: number | null };
+
 type ScrollState = {
   winY: number;
   seriesY: number;
@@ -178,14 +182,17 @@ export default function Home() {
   const [shipQuery, setShipQuery] = useState<string>("");
   const [ownershipSaveStatus, setOwnershipSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
   const [ownershipPendingCount, setOwnershipPendingCount] = useState(0);
+  const [pointSaveStatus, setPointSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
+  const [pointPendingCount, setPointPendingCount] = useState(0);
   const refSeriesBox = useRef<HTMLDivElement | null>(null);
   const refUnusedBox = useRef<HTMLDivElement | null>(null);
   const refOwnedBox = useRef<HTMLDivElement | null>(null);
-  const seriesSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const unusedSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const pendingOwnershipRef = useRef<Map<string, PendingOwnershipChange>>(new Map());
   const ownershipSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ownershipSavingRef = useRef(false);
+  const pendingPointRef = useRef<Map<string, PendingPointChange>>(new Map());
+  const pointSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pointSavingRef = useRef(false);
 
   // +5/-5を連打したときも、Reactの再描画を待たずに最新値を参照するためのref
   const latestSeriesPointsRef = useRef<Record<string, number>>({});
@@ -289,6 +296,23 @@ export default function Home() {
     }
 
     throw lastError instanceof Error ? lastError : new Error("所有状態の一括保存に失敗しました");
+  }
+
+  async function apiBatchUpsertPoints(changes: PendingPointChange[]) {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        return await gasPost({ action: "batchUpsertPoints", changes });
+      } catch (error) {
+        lastError = error;
+        if (attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+        }
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error("ポイントの一括保存に失敗しました");
   }
 
   async function apiUpsertPt(userName: string, series: string, pt: number | null) {
@@ -520,15 +544,16 @@ export default function Home() {
 
   useEffect(() => {
     return () => {
-      Object.values(seriesSaveTimersRef.current).forEach(clearTimeout);
-      Object.values(unusedSaveTimersRef.current).forEach(clearTimeout);
       if (ownershipSaveTimerRef.current) clearTimeout(ownershipSaveTimerRef.current);
+      if (pointSaveTimerRef.current) clearTimeout(pointSaveTimerRef.current);
     };
   }, []);
 
   useEffect(() => {
     const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
-      if (pendingOwnershipRef.current.size === 0 && !ownershipSavingRef.current) return;
+      const ownershipIdle = pendingOwnershipRef.current.size === 0 && !ownershipSavingRef.current;
+      const pointsIdle = pendingPointRef.current.size === 0 && !pointSavingRef.current;
+      if (ownershipIdle && pointsIdle) return;
       event.preventDefault();
       event.returnValue = "";
     };
@@ -818,33 +843,77 @@ export default function Home() {
   }
 
   function scheduleSeriesSave(userName: string, series: string, pt: number | null) {
-    const key = `${userName}::${series}`;
-    clearTimeout(seriesSaveTimersRef.current[key]);
-    seriesSaveTimersRef.current[key] = setTimeout(async () => {
-      try {
-        await apiUpsertPt(userName, series, pt);
-        await apiWriteLog(userName, "技術Pt変更", `${series}：${pt === null ? "空欄" : pt}`);
-      } catch (error) {
-        console.error("技術Ptの保存に失敗", error);
-      } finally {
-        delete seriesSaveTimersRef.current[key];
-      }
-    }, 350);
+    pendingPointRef.current.set(`series::${userName}::${series}`, {
+      kind: "series",
+      userName,
+      series,
+      pt,
+    });
+    setPointPendingCount(pendingPointRef.current.size);
+    setPointSaveStatus("pending");
+    schedulePointSave();
   }
 
   function scheduleUnusedSave(userName: string, cls: UnusedClass, pt: number | null) {
-    const key = `${userName}::${cls}`;
-    clearTimeout(unusedSaveTimersRef.current[key]);
-    unusedSaveTimersRef.current[key] = setTimeout(async () => {
-      try {
-        await apiUpsertUnusedPt(userName, cls, pt);
-        await apiWriteLog(userName, "未使用Pt変更", `${cls}：${pt === null ? "空欄" : pt}`);
-      } catch (error) {
-        console.error("未使用Ptの保存に失敗", error);
-      } finally {
-        delete unusedSaveTimersRef.current[key];
+    pendingPointRef.current.set(`unused::${userName}::${cls}`, {
+      kind: "unused",
+      userName,
+      cls,
+      pt,
+    });
+    setPointPendingCount(pendingPointRef.current.size);
+    setPointSaveStatus("pending");
+    schedulePointSave();
+  }
+
+  function schedulePointSave() {
+    if (pointSaveTimerRef.current) clearTimeout(pointSaveTimerRef.current);
+    pointSaveTimerRef.current = setTimeout(() => {
+      void flushPointChanges();
+    }, 1000);
+  }
+
+  async function flushPointChanges() {
+    if (pointSavingRef.current) return;
+
+    const entries = Array.from(pendingPointRef.current.entries());
+    if (entries.length === 0) return;
+
+    pointSaveTimerRef.current = null;
+    entries.forEach(([key]) => pendingPointRef.current.delete(key));
+    setPointPendingCount(pendingPointRef.current.size);
+    pointSavingRef.current = true;
+    setPointSaveStatus("saving");
+    let failed = false;
+
+    try {
+      const changes = entries.map(([, change]) => change);
+      await apiBatchUpsertPoints(changes);
+
+      const userNames = Array.from(new Set(changes.map((change) => change.userName)));
+      await apiWriteLog(
+        userNames.length === 1 ? userNames[0] : "複数ユーザー",
+        "ポイント変更",
+        `${changes.length}件を一括反映`
+      );
+      setPointSaveStatus("saved");
+    } catch (error) {
+      failed = true;
+      entries.forEach(([key, change]) => {
+        if (!pendingPointRef.current.has(key)) {
+          pendingPointRef.current.set(key, change);
+        }
+      });
+      setPointPendingCount(pendingPointRef.current.size);
+      setPointSaveStatus("error");
+      console.error("ポイントの一括保存に失敗", error);
+      alert("ポイントを保存できませんでした。ページを閉じず、もう一度入力してください。");
+    } finally {
+      pointSavingRef.current = false;
+      if (pendingPointRef.current.size > 0 && !failed) {
+        schedulePointSave();
       }
-    }, 350);
+    }
   }
 
   function addSeriesPoints(series: string, amount: number) {
@@ -907,6 +976,12 @@ export default function Home() {
     scheduleUnusedSave(userName, cls, next);
 
   }
+
+  const pointStatusText =
+    pointSaveStatus === "pending" ? `保存待ち ${pointPendingCount}件` :
+    pointSaveStatus === "saving" ? "保存中…" :
+    pointSaveStatus === "saved" ? "保存済み" :
+    pointSaveStatus === "error" ? `未保存 ${pointPendingCount}件` : "";
 
   return (
     <main
@@ -1324,7 +1399,25 @@ export default function Home() {
 
         {/* Pt設定(設計図ごと)*/}
         <div className="section-card" style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, marginBottom: 10 }}>
-          <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>技術Ptの数を入力（設計図ごと）</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 6 }}>
+            <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 0 }}>技術Ptの数を入力（設計図ごと）</div>
+            {pointStatusText && (
+              <div
+                aria-live="polite"
+                style={{
+                  flexShrink: 0,
+                  padding: "5px 9px",
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: pointSaveStatus === "error" ? "#991b1b" : "#0d5b69",
+                  background: pointSaveStatus === "error" ? "#fee2e2" : "#dff3f6",
+                }}
+              >
+                {pointStatusText}
+              </div>
+            )}
+          </div>
            <div className="section-note" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>ポイントを振っていない場合でも、設計図を所持していれば0を入力してください</div>
 
           {!selectedUser ? (
@@ -1484,7 +1577,25 @@ export default function Home() {
 
         {/* 未使用Pt（艦種ごと） */}
         <div className="section-card" style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, marginBottom: 10 }}>
-          <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>未使用Ptの入力（艦種ごと）</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 6 }}>
+            <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 0 }}>未使用Ptの入力（艦種ごと）</div>
+            {pointStatusText && (
+              <div
+                aria-live="polite"
+                style={{
+                  flexShrink: 0,
+                  padding: "5px 9px",
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: pointSaveStatus === "error" ? "#991b1b" : "#0d5b69",
+                  background: pointSaveStatus === "error" ? "#fee2e2" : "#dff3f6",
+                }}
+              >
+                {pointStatusText}
+              </div>
+            )}
+          </div>
 
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
@@ -1641,14 +1752,16 @@ export default function Home() {
       <div
         style={{
           position: "fixed",
-          right: 8,
+          left: "50%",
           bottom: 6,
+          transform: "translateX(-50%)",
           fontSize: 11,
           color: "#6b7280",
           userSelect: "none",
+          whiteSpace: "nowrap",
         }}
       >
-        v1.216
+        v1.217
 </div>
 
       <style jsx>{`
