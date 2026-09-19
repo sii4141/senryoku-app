@@ -653,7 +653,9 @@ export default function Home() {
     const series = guessSeries(item.name);
     const alreadyOwnsSeries =
       series !== "" && currentList.some((ownedItem) => guessSeries(ownedItem.name) === series);
-    const shouldInitializeSeriesPt = nextOwned && series !== "" && !alreadyOwnsSeries;
+    const existingSeriesPt = series !== "" ? seriesPointsByUser[user]?.[series] : undefined;
+    const shouldInitializeSeriesPt =
+      nextOwned && series !== "" && !alreadyOwnsSeries && existingSeriesPt === undefined;
 
     setUsers((prev) => {
       const list = prev[user] || [];
@@ -1522,7 +1524,7 @@ export default function Home() {
           userSelect: "none",
         }}
       >
-        v1.21
+        v1.211
 </div>
 
       <style jsx>{`

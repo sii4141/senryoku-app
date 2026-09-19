@@ -136,7 +136,8 @@ function upsertOwn_(userName, shipName, series, own) {
   let initializedSeriesPt = false;
   let seriesColLetter = "";
 
-  // 所有に変える前に同シリーズのモデルが1つもなければ、シリーズPtを0にする。
+  // 所有に変える前に同シリーズのモデルが1つもなく、Ptセルも空欄なら0にする。
+  // すでに0を含む数値が入力されている場合は、その値を維持する。
   // 所有更新とPt初期化を同じロック内で行うため、同時操作でも判定がずれない。
   if (isOwned && series) {
     seriesColLetter = findColLetterByName_(series);
@@ -154,8 +155,11 @@ function upsertOwn_(userName, shipName, series, own) {
           return String(value || "").trim() === "◯";
         });
 
-        if (!alreadyOwnsSeries) {
-          sh.getRange(row, seriesCol).setValue(0);
+        const seriesPtCell = sh.getRange(row, seriesCol);
+        const seriesPtIsBlank = String(seriesPtCell.getDisplayValue() || "").trim() === "";
+
+        if (!alreadyOwnsSeries && seriesPtIsBlank) {
+          seriesPtCell.setValue(0);
           initializedSeriesPt = true;
         }
       }
