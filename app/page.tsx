@@ -875,13 +875,32 @@ export default function Home() {
               
                 // ✅ すでに同名がいるなら中断
                 if (!created) {
-                  alert("そのユーザーはすでに作成済みです");
+                  alert("そのユーザー名はすでに登録済みです");
                   return;
                 }
-              
+
                 // ✅ 新規のときだけGASへ作成
                 try {
-                  await apiCreateUser(u);
+                  const result = await apiCreateUser(u);
+
+                  if (!result?.ok) {
+                    throw new Error(result?.error || "ユーザーを作成できませんでした");
+                  }
+
+                  // 別端末などで直前に登録されていた場合も重複として扱う
+                  if (result.status === "exists") {
+                    alert("そのユーザー名はすでに登録済みです");
+
+                    // 楽観的に追加した空データを、GASの最新データで置き換える
+                    const latest = await apiExport();
+                    if (latest?.ok) {
+                      if (latest.users) setUsers(latest.users);
+                      if (latest.seriesPointsByUser) setSeriesPointsByUser(latest.seriesPointsByUser);
+                      if (latest.unusedPointsByUser) setUnusedPointsByUser(latest.unusedPointsByUser);
+                    }
+                    return;
+                  }
+
                   await apiWriteLog(u, "ユーザー作成", `${u} を作成`);
                 } catch (e) {
                   console.error("GASユーザー作成失敗", e);
@@ -1524,7 +1543,7 @@ export default function Home() {
           userSelect: "none",
         }}
       >
-        v1.211
+        v1.212
 </div>
 
       <style jsx>{`
