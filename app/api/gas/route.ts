@@ -12,8 +12,17 @@ export async function POST(req: Request) {
   });
 
   const text = await res.text();
-  return new NextResponse(text, {
-    status: 200,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-  });
+  try {
+    const data = JSON.parse(text);
+    return NextResponse.json(data, { status: res.ok ? 200 : res.status });
+  } catch {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "GASからJSON以外の応答が返されました",
+        upstreamStatus: res.status,
+      },
+      { status: 502 }
+    );
+  }
 }

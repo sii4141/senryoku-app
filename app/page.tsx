@@ -173,6 +173,7 @@ export default function Home() {
   const refOwnedBox = useRef<HTMLDivElement | null>(null);
   const seriesSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const unusedSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const ownershipSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   // +5/-5を連打したときも、Reactの再描画を待たずに最新値を参照するためのref
   const latestSeriesPointsRef = useRef<Record<string, number>>({});
@@ -184,7 +185,20 @@ export default function Home() {
       method: "POST",
       body: JSON.stringify(payload),
     });
-    return await res.json();
+    const text = await res.text();
+
+    let result: Record<string, any>;
+    try {
+      result = JSON.parse(text);
+    } catch {
+      throw new Error("GASからJSON以外の応答が返されました");
+    }
+
+    if (!res.ok || result.ok === false) {
+      throw new Error(String(result.error || `GASへの保存に失敗しました（${res.status}）`));
+    }
+
+    return result;
   }
 
   // ---------- 操作ログをスプレッドシートへ保存（/api/gas 経由） ----------
@@ -224,14 +238,28 @@ export default function Home() {
     series: string,
     own: boolean
   ) {
-    return await gasPost({
+    const payload = {
       action: "upsertOwn",
       userName,
       shipName,
       shipType,
       series,
       own: own ? 1 : 0,
-    });
+    };
+
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        return await gasPost(payload);
+      } catch (error) {
+        lastError = error;
+        if (attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+        }
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error("所有状態の保存に失敗しました");
   }
 
   async function apiUpsertPt(userName: string, series: string, pt: number | null) {
@@ -646,8 +674,28 @@ export default function Home() {
     return list.some((x) => normalize(x.name) === key);
   }
 
+  function enqueueOwnershipSave(
+    user: string,
+    item: OwnedItem,
+    series: string,
+    nextOwned: boolean
+  ) {
+    const save = async () => {
+      await apiUpsertOwn(user, item.name, item.type, series, nextOwned);
+      await apiWriteLog(user, "所持変更", `${item.name}：${nextOwned ? "所有" : "未所有"}`);
+    };
+
+    // 連打されてもGASへは必ず1件ずつ順番に送る。
+    ownershipSaveQueueRef.current = ownershipSaveQueueRef.current
+      .then(save, save)
+      .catch((error) => {
+        console.error("所持状態の保存に失敗", error);
+        alert(`${item.name} の所有変更を保存できませんでした。通信状態を確認してもう一度操作してください。`);
+      });
+  }
+
   // ---------- 所持トグル ----------
-  async function toggleOwned(user: string, item: OwnedItem) {
+  function toggleOwned(user: string, item: OwnedItem) {
     const key = normalize(item.name);
     const currentList = users[user] || [];
     const has = currentList.some((x) => normalize(x.name) === key);
@@ -680,12 +728,7 @@ export default function Home() {
       });
     }
 
-    try {
-      await apiUpsertOwn(user, item.name, item.type, series, nextOwned);
-      await apiWriteLog(user, "所持変更", `${item.name}：${nextOwned ? "所有" : "未所有"}`);
-    } catch (error) {
-      console.error("所持状態の保存に失敗", error);
-    }
+    enqueueOwnershipSave(user, item, series, nextOwned);
 
   }
 
@@ -1504,7 +1547,7 @@ export default function Home() {
           userSelect: "none",
         }}
       >
-        v1.213
+        v1.214
 </div>
 
       <style jsx>{`
