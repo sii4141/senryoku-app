@@ -346,6 +346,9 @@ a:active {
 .point-actions input {
   width: 58px !important;
   min-height: 38px;
+  padding: 6px 3px !important;
+  font-size: 14px;
+  line-height: 1;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
