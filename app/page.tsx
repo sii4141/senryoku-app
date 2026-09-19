@@ -1,5 +1,6 @@
 "use client";
 // npm run dev
+// npm.cmd run dev
 import { useEffect, useMemo, useState, useRef } from "react";
 import initialData from "@/src/data/data.json";
 import Link from "next/link";
@@ -740,6 +741,7 @@ export default function Home() {
 
   return (
     <main
+      className="home-shell"
       style={{
         minHeight: "100vh",
         background: "#f3f4f6",
@@ -748,6 +750,7 @@ export default function Home() {
       }}
     >
       <div
+        className="home-panel"
         style={{
           width: "100%",
           maxWidth: 760,
@@ -759,9 +762,13 @@ export default function Home() {
           boxShadow: "0 10px 25px rgba(0,0,0,0.08)",
         }}
       >
-        <h1 style={{ fontSize: 20, fontWeight: "bold", marginBottom: 12 }}>戦力評価アプリ</h1>
-        <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 8 }}>横持ちのほうが入力しやすいです</div>
+        <header className="home-header">
+          <div>
+            <h1 className="home-title" style={{ fontSize: 20, fontWeight: "bold", marginBottom: 12 }}>戦力評価アプリ</h1>
+            <div className="home-kicker" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 8 }}>FLEET CAPABILITY CONSOLE · 横持ち推奨</div>
+          </div>
         <div
+          className="home-nav"
           style={{
             marginBottom: 12,
             display: "flex",
@@ -799,9 +806,10 @@ export default function Home() {
             艦船図鑑ページへ
           </Link>
         </div>
+        </header>
         {/* 新規ユーザー作成 */}
-        <div style={{ marginBottom: 12, border: "1px solid #e5e7eb", borderRadius: 12, padding: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 8 }}>新しく記入する方はこちらから入力</div>
+        <div className="section-card" style={{ marginBottom: 12, border: "1px solid #e5e7eb", borderRadius: 12, padding: 10 }}>
+          <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 8 }}>新しく記入する方はこちらから入力</div>
           <div style={{ display: "flex", gap: 8 }}>
             <input
               value={newUserName}
@@ -810,6 +818,7 @@ export default function Home() {
               style={{ flex: 1, padding: 10, border: "1px solid #d1d5db", borderRadius: 8 }}
             />
             <button
+              className="primary-action"
               onClick={async () => {
                 const { user: u, created } = ensureUser(newUserName);
                 if (!u) return;
@@ -870,7 +879,7 @@ export default function Home() {
         </div>
 
         {/* ユーザー検索 */}
-        <div style={{ marginBottom: 12 }}>
+        <div className="section-card" style={{ marginBottom: 12 }}>
           <label style={{ fontSize: 12, color: "#374151" }}>ユーザー検索（プルダウン）</label>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
             <input
@@ -881,6 +890,7 @@ export default function Home() {
               style={{ flex: 1, padding: 10, border: "1px solid #d1d5db", borderRadius: 8 }}
             />
             <button
+              className="secondary-action"
               onClick={() => {
                 const q = userQuery.trim();
                 if (!q) return;
@@ -913,12 +923,13 @@ export default function Home() {
           <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>ユーザー数：{Object.keys(users || {}).length}人</div>
 
           {/* 一覧（削除ボタン付き） */}
-          <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+          <div className="user-grid" style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
             {filteredUserNames.map((name) => {
               const active = name === selectedUser;
               return (
                 <div
                   key={name}
+                  className={`user-card${active ? " user-card-active" : ""}`}
                   style={{
                     border: active ? "2px solid #2563eb" : "1px solid #d1d5db",
                     borderRadius: 10,
@@ -969,7 +980,7 @@ export default function Home() {
           </div>
         </div>
         {/* ユーザー削除（まとめて） */}
-        <div style={{ marginTop: 12, border: "1px solid #fee2e2", borderRadius: 12, padding: 10, background: "#fff1f2" }}>
+        <div className="section-card danger-card" style={{ marginTop: 12, border: "1px solid #fee2e2", borderRadius: 12, padding: 10, background: "#fff1f2" }}>
           <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 8, color: "#991b1b" }}>ユーザー削除</div>
 
           <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>
@@ -999,7 +1010,7 @@ export default function Home() {
         </div>
 
         {/* 合計 */}
-        <div style={{ marginBottom: 12 }}>
+        <div className="section-card" style={{ marginBottom: 12 }}>
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>ユーザーを選択してください</div>
           ) : (
@@ -1013,6 +1024,7 @@ export default function Home() {
                 {CLASS_ORDER.map((cls) => (
                   <div
                     key={cls}
+                    className="summary-card"
                     style={{
                       border: "1px solid #e5e7eb",
                       borderRadius: 10,
@@ -1034,7 +1046,7 @@ export default function Home() {
         </div>
 
         {/* フィルタ */}
-        <div style={{ marginBottom: 12 }}>
+        <div className="section-card" style={{ marginBottom: 12 }}>
           <label style={{ fontSize: 12, color: "#374151" }}>艦種フィルタ</label>
           <select
             value={shipType}
@@ -1050,9 +1062,9 @@ export default function Home() {
         </div>
 
         {/* Pt設定(設計図ごと)*/}
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>技術Ptの数を入力(設計図ごと)</div>
-           <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>ポイントを振っていない場合でも，設計図を所持していれば0を入力してください</div>
+        <div className="section-card" style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, marginBottom: 10 }}>
+          <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>技術Ptの数を入力（設計図ごと）</div>
+           <div className="section-note" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>ポイントを振っていない場合でも、設計図を所持していれば0を入力してください</div>
 
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
@@ -1213,8 +1225,8 @@ export default function Home() {
 
 
         {/* 未使用Pt（艦種ごと） */}
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>未使用Ptの入力（艦種ごと）</div>
+        <div className="section-card" style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, marginBottom: 10 }}>
+          <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>未使用Ptの入力（艦種ごと）</div>
 
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
@@ -1371,13 +1383,13 @@ export default function Home() {
 
 
         {/* 所持 */}
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>所持モデル・モジュール入力（タップで◯を入力）</div>
+        <div className="section-card" style={{ marginBottom: 10 }}>
+          <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>所持モデル・モジュール入力（タップで◯を入力）</div>
 
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
           ) : (
-            <div ref={refOwnedBox}style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, maxHeight: 420, overflow: "auto" }}>
+            <div ref={refOwnedBox} className="owned-list" style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, maxHeight: 420, overflow: "auto" }}>
               {filteredCatalog.map((it, idx) => {            
                 const owned = isOwned(selectedUser, it.name);
                 const cls = classifyByName(it.name);
@@ -1388,6 +1400,7 @@ export default function Home() {
                 return (
                   <div
                     key={`${it.name}__${idx}`}
+                    className="owned-row"
                     style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "10px 8px", borderBottom: "1px solid #f3f4f6" , background: bgColor,}}
                   >
                     <div style={{ minWidth: 0 }}>
@@ -1398,6 +1411,7 @@ export default function Home() {
                     </div>
 
                     <button
+                      className="owned-toggle"
                       onClick={() => toggleOwned(selectedUser, it)}
                       style={{
                         width: 44,
@@ -1421,7 +1435,7 @@ export default function Home() {
           )}
         </div>
 
-        <div style={{ marginTop: 12, fontSize: 12, color: "#6b7280" }}>
+        <div className="sync-note" style={{ marginTop: 12, fontSize: 12, color: "#6b7280" }}>
           ※ スプレッドシートからアプリ側への反映は 1時間に1回です（起動時は即時1回）。<br />
         </div>
       </div>
