@@ -574,6 +574,31 @@ export default function Home() {
     return unusedPointsByUser[selectedUser] || emptyUnusedPoints();
   }, [unusedPointsByUser, selectedUser]);
 
+  // 入力中は画面に表示されている下書き値を優先する。
+  // 保存済みデータだけを参照すると、入力欄と合計Ptの表示が一時的に食い違う。
+  const effectiveSeriesPoints: SeriesPointsMap = useMemo(() => {
+    const points: SeriesPointsMap = { ...seriesPoints };
+    if (!selectedUser) return points;
+
+    for (const [series, raw] of Object.entries(seriesDraftByUser[selectedUser] || {})) {
+      if (raw.trim() === "") delete points[series];
+      else points[series] = clampInt(raw);
+    }
+    return points;
+  }, [seriesPoints, seriesDraftByUser, selectedUser]);
+
+  const effectiveUnusedPoints: UnusedPointsMap = useMemo(() => {
+    const points: UnusedPointsMap = { ...unusedPoints };
+    if (!selectedUser) return points;
+
+    for (const [cls, raw] of Object.entries(unusedDraftByUser[selectedUser] || {})) {
+      const unusedClass = cls as UnusedClass;
+      if (raw.trim() === "") delete points[unusedClass];
+      else points[unusedClass] = clampInt(raw);
+    }
+    return points;
+  }, [unusedPoints, unusedDraftByUser, selectedUser]);
+
   // ✅ 表示用ユーザー一覧（検索反映）
   const filteredUserNames: string[] = useMemo(() => {
     const names = Object.keys(users || {}).sort((a, b) => a.localeCompare(b, "ja"));
@@ -618,12 +643,12 @@ export default function Home() {
         continue;
       }
 
-      totals[cls] += seriesPoints[s] ?? 0;
+      totals[cls] += effectiveSeriesPoints[s] ?? 0;
     }
 
     // ② 未使用Ptを各分類に加算（型安全）
     for (const cls of UNUSED_CLASSES) {
-      totals[cls] += unusedPoints[cls] ?? 0;
+      totals[cls] += effectiveUnusedPoints[cls] ?? 0;
     }
 
     let grand = 0;
@@ -637,7 +662,7 @@ export default function Home() {
 
 
     return totals;
-  }, [selectedUser, ownedList, seriesPoints, unusedPoints]);
+  }, [selectedUser, ownedList, effectiveSeriesPoints, effectiveUnusedPoints]);
 
   // ✅ 図鑑（MASTER_ORDER順＋検索＋フィルタ）
   const filteredCatalog: OwnedItem[] = useMemo(() => {
@@ -1358,7 +1383,7 @@ export default function Home() {
                 const cls = classifyByName(it.name);
                 const bgColor = CLASS_COLOR[cls] || "#ffffff";
                 const series = guessSeries(it.name);
-                const pt = series ? (seriesPoints[series] ?? 0) : 0;
+                const pt = series ? (effectiveSeriesPoints[series] ?? 0) : 0;
 
                 return (
                   <div
@@ -1761,7 +1786,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.217
+        v1.218
 </div>
 
       <style jsx>{`
