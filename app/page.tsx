@@ -1349,79 +1349,6 @@ export default function Home() {
           </select>
         </div>
 
-        {/* 所持 */}
-        <div className="section-card" style={{ marginBottom: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 6 }}>
-            <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 0 }}>所持モデル・モジュール入力（タップで◯を入力）</div>
-            {ownershipSaveStatus !== "idle" && (
-              <div
-                aria-live="polite"
-                style={{
-                  flexShrink: 0,
-                  padding: "5px 9px",
-                  borderRadius: 999,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: ownershipSaveStatus === "error" ? "#991b1b" : "#0d5b69",
-                  background: ownershipSaveStatus === "error" ? "#fee2e2" : "#dff3f6",
-                }}
-              >
-                {ownershipSaveStatus === "pending" && `保存待ち ${ownershipPendingCount}件`}
-                {ownershipSaveStatus === "saving" && "保存中…"}
-                {ownershipSaveStatus === "saved" && "保存済み"}
-                {ownershipSaveStatus === "error" && `未保存 ${ownershipPendingCount}件`}
-              </div>
-            )}
-          </div>
-
-          {!selectedUser ? (
-            <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
-          ) : (
-            <div ref={refOwnedBox} className="owned-list" style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, maxHeight: 420, overflow: "auto" }}>
-              {filteredCatalog.map((it, idx) => {
-                const owned = isOwned(selectedUser, it.name);
-                const cls = classifyByName(it.name);
-                const bgColor = CLASS_COLOR[cls] || "#ffffff";
-                const series = guessSeries(it.name);
-                const pt = series ? (effectiveSeriesPoints[series] ?? 0) : 0;
-
-                return (
-                  <div
-                    key={`${it.name}__${idx}`}
-                    className="owned-row"
-                    style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "10px 8px", borderBottom: "1px solid #f3f4f6", background: bgColor }}
-                  >
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600 }}>{it.name}</div>
-                      <div style={{ fontSize: 12, color: "#000000" }}>
-                        {cls} / {series ? `シリーズ:${series} / Pt:${pt}` : "シリーズ未判定 / Pt:0"}
-                      </div>
-                    </div>
-
-                    <button
-                      className="owned-toggle"
-                      onClick={() => toggleOwned(selectedUser, it)}
-                      style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 12,
-                        border: owned ? "2px solid #16a34a" : "1px solid #d1d5db",
-                        background: owned ? "#dcfce7" : "white",
-                        fontSize: 18,
-                        fontWeight: "bold",
-                        cursor: "pointer",
-                      }}
-                      title="所持を切り替え"
-                    >
-                      {owned ? "◯" : ""}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
         {/* Pt設定(設計図ごと)*/}
         <div className="section-card" style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, marginBottom: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 6 }}>
@@ -1769,6 +1696,80 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        {/* 所持 */}
+        <div className="section-card" style={{ marginBottom: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 6 }}>
+            <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 0 }}>所持モデル・モジュール入力（タップで◯を入力）</div>
+            {ownershipSaveStatus !== "idle" && (
+              <div
+                aria-live="polite"
+                style={{
+                  flexShrink: 0,
+                  padding: "5px 9px",
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: ownershipSaveStatus === "error" ? "#991b1b" : "#0d5b69",
+                  background: ownershipSaveStatus === "error" ? "#fee2e2" : "#dff3f6",
+                }}
+              >
+                {ownershipSaveStatus === "pending" && `保存待ち ${ownershipPendingCount}件`}
+                {ownershipSaveStatus === "saving" && "保存中…"}
+                {ownershipSaveStatus === "saved" && "保存済み"}
+                {ownershipSaveStatus === "error" && `未保存 ${ownershipPendingCount}件`}
+              </div>
+            )}
+          </div>
+
+          {!selectedUser ? (
+            <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
+          ) : (
+            <div ref={refOwnedBox} className="owned-list" style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, maxHeight: 420, overflow: "auto" }}>
+              {filteredCatalog.map((it, idx) => {
+                const owned = isOwned(selectedUser, it.name);
+                const cls = classifyByName(it.name);
+                const bgColor = CLASS_COLOR[cls] || "#ffffff";
+                const series = guessSeries(it.name);
+                const pt = series ? (effectiveSeriesPoints[series] ?? 0) : 0;
+
+                return (
+                  <div
+                    key={`${it.name}__${idx}`}
+                    className="owned-row"
+                    style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "10px 8px", borderBottom: "1px solid #f3f4f6", background: bgColor }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{it.name}</div>
+                      <div style={{ fontSize: 12, color: "#000000" }}>
+                        {cls} / {series ? `シリーズ:${series} / Pt:${pt}` : "シリーズ未判定 / Pt:0"}
+                      </div>
+                    </div>
+
+                    <button
+                      className="owned-toggle"
+                      onClick={() => toggleOwned(selectedUser, it)}
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 12,
+                        border: owned ? "2px solid #16a34a" : "1px solid #d1d5db",
+                        background: owned ? "#dcfce7" : "white",
+                        fontSize: 18,
+                        fontWeight: "bold",
+                        cursor: "pointer",
+                      }}
+                      title="所持を切り替え"
+                    >
+                      {owned ? "◯" : ""}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         <div className="sync-note" style={{ marginTop: 12, fontSize: 12, color: "#6b7280" }}>
           ※ スプレッドシートからアプリ側への反映は 1時間に1回です（起動時は即時1回）。<br />
         </div>
