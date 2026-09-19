@@ -56,6 +56,13 @@ const CLASS_COLOR: Record<string, string> = {
 type UnusedPointsMap = Partial<Record<UnusedClass, number>>;
 type UnusedPointsByUserMap = Record<string, UnusedPointsMap>;
 
+type InputSnapshot = {
+  userName: string;
+  ownedList: OwnedItem[];
+  seriesPoints: SeriesPointsMap;
+  unusedPoints: UnusedPointsMap;
+};
+
 type ScrollState = {
   winY: number;
   seriesY: number;
@@ -168,20 +175,18 @@ export default function Home() {
   const [shipType, setShipType] = useState<ShipType>("全艦船");
   const [userQuery, setUserQuery] = useState<string>("");
   const [shipQuery, setShipQuery] = useState<string>("");
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSavingInput, setIsSavingInput] = useState(false);
 
   const refSeriesBox = useRef<HTMLDivElement | null>(null);
   const refUnusedBox = useRef<HTMLDivElement | null>(null);
   const refOwnedBox = useRef<HTMLDivElement | null>(null);
+  const inputSnapshotRef = useRef<InputSnapshot | null>(null);
+  const isEditingRef = useRef(false);
 
   // +5/-5を連打したときも、Reactの再描画を待たずに最新値を参照するためのref
   const latestSeriesPointsRef = useRef<Record<string, number>>({});
   const latestUnusedPointsRef = useRef<Record<string, number>>({});
-
-  // 同じ項目への連続操作をまとめ、最後の値だけGASへ送信するためのタイマー
-  const seriesSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const unusedSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const seriesSaveQueuesRef = useRef<Record<string, Promise<void>>>({});
-  const unusedSaveQueuesRef = useRef<Record<string, Promise<void>>>({});
 
   // ---------- GASへ送る（Nextの /api/gas 経由：CORS回避） ----------
   async function gasPost(payload: Record<string, any>) {
@@ -424,6 +429,8 @@ export default function Home() {
     let alive = true;
 
     const tick = async () => {
+      if (isEditingRef.current) return;
+
       try {
         const data = await apiExport();
         if (!alive) return;
@@ -455,16 +462,29 @@ export default function Home() {
 
   // ---------- localStorage 保存 ----------
   useEffect(() => {
+    if (isEditing) return;
     localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(users || {}));
-  }, [users]);
+  }, [users, isEditing]);
 
   useEffect(() => {
+    if (isEditing) return;
     localStorage.setItem(STORAGE_KEY_SERIES_POINTS_BY_USER, JSON.stringify(seriesPointsByUser || {}));
-  }, [seriesPointsByUser]);
+  }, [seriesPointsByUser, isEditing]);
 
   useEffect(() => {
+    if (isEditing) return;
     localStorage.setItem(STORAGE_KEY_UNUSED_POINTS_BY_USER, JSON.stringify(unusedPointsByUser || {}));
-  }, [unusedPointsByUser]);
+  }, [unusedPointsByUser, isEditing]);
+
+  useEffect(() => {
+    if (!isEditing) return;
+
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [isEditing]);
 
   // ✅ 選択中ユーザーのPtマップ
   const seriesPoints: SeriesPointsMap = useMemo(() => {
@@ -644,8 +664,104 @@ export default function Home() {
     return list.some((x) => normalize(x.name) === key);
   }
 
+  function startInput() {
+    if (!selectedUser || isEditing) return;
+
+    inputSnapshotRef.current = {
+      userName: selectedUser,
+      ownedList: (users[selectedUser] || []).map((item) => ({ ...item })),
+      seriesPoints: { ...(seriesPointsByUser[selectedUser] || {}) },
+      unusedPoints: { ...(unusedPointsByUser[selectedUser] || {}) },
+    };
+    isEditingRef.current = true;
+    setIsEditing(true);
+  }
+
+  async function confirmInput() {
+    const snapshot = inputSnapshotRef.current;
+    if (!snapshot || !isEditing || isSavingInput || snapshot.userName !== selectedUser) return;
+
+    const userName = snapshot.userName;
+    const currentOwnedList = users[userName] || [];
+    const currentSeriesPoints: SeriesPointsMap = { ...(seriesPointsByUser[userName] || {}) };
+    const currentUnusedPoints: UnusedPointsMap = { ...(unusedPointsByUser[userName] || {}) };
+
+    for (const [series, raw] of Object.entries(seriesDraftByUser[userName] || {})) {
+      if (raw.trim() === "") delete currentSeriesPoints[series];
+      else currentSeriesPoints[series] = clampInt(raw);
+    }
+    for (const [cls, raw] of Object.entries(unusedDraftByUser[userName] || {})) {
+      const unusedClass = cls as UnusedClass;
+      if (raw.trim() === "") delete currentUnusedPoints[unusedClass];
+      else currentUnusedPoints[unusedClass] = clampInt(raw);
+    }
+
+    const requireSuccess = (result: { ok?: boolean; error?: string } | undefined) => {
+      if (!result?.ok) throw new Error(result?.error || "スプレッドシートへの保存に失敗しました");
+    };
+
+    setIsSavingInput(true);
+    try {
+      const beforeOwned = new Map(snapshot.ownedList.map((item) => [normalize(item.name), item]));
+      const afterOwned = new Map(currentOwnedList.map((item) => [normalize(item.name), item]));
+      const ownedNames = new Set([...beforeOwned.keys(), ...afterOwned.keys()]);
+
+      for (const name of ownedNames) {
+        const before = beforeOwned.has(name);
+        const after = afterOwned.has(name);
+        if (before === after) continue;
+
+        const item = afterOwned.get(name) || beforeOwned.get(name);
+        if (!item) continue;
+        requireSuccess(await apiUpsertOwn(userName, item.name, item.type, guessSeries(item.name), after));
+      }
+
+      const seriesNames = new Set([
+        ...Object.keys(snapshot.seriesPoints),
+        ...Object.keys(currentSeriesPoints),
+      ]);
+      for (const series of seriesNames) {
+        const before = snapshot.seriesPoints[series];
+        const after = currentSeriesPoints[series];
+        if (before === after) continue;
+        requireSuccess(await apiUpsertPt(userName, series, after ?? null));
+      }
+
+      for (const cls of UNUSED_CLASSES) {
+        const before = snapshot.unusedPoints[cls];
+        const after = currentUnusedPoints[cls];
+        if (before === after) continue;
+        requireSuccess(await apiUpsertUnusedPt(userName, cls, after ?? null));
+      }
+
+      setSeriesPointsByUser((prev) => ({
+        ...prev,
+        [userName]: currentSeriesPoints,
+      }));
+      setUnusedPointsByUser((prev) => ({
+        ...prev,
+        [userName]: currentUnusedPoints,
+      }));
+      setSeriesDraftByUser((prev) => ({ ...prev, [userName]: {} }));
+      setUnusedDraftByUser((prev) => ({ ...prev, [userName]: {} }));
+
+      await apiWriteLog(userName, "入力確定", "所持モデル・設計図Pt・未使用Ptをまとめて反映");
+      inputSnapshotRef.current = null;
+      isEditingRef.current = false;
+      setIsEditing(false);
+      alert("入力内容を反映しました");
+    } catch (error) {
+      console.error("入力内容の一括反映に失敗", error);
+      alert("入力内容を反映できませんでした。通信状態を確認して、もう一度お試しください。");
+    } finally {
+      setIsSavingInput(false);
+    }
+  }
+
   // ---------- 所持トグル ----------
-  async function toggleOwned(user: string, item: OwnedItem) {
+  function toggleOwned(user: string, item: OwnedItem) {
+    if (!isEditing || isSavingInput) return;
+
     const key = normalize(item.name);
     const currentList = users[user] || [];
     const has = currentList.some((x) => normalize(x.name) === key);
@@ -678,25 +794,10 @@ export default function Home() {
       });
     }
 
-    try {
-      await apiUpsertOwn(user, item.name, item.type, series, nextOwned);
-
-      if (shouldInitializeSeriesPt) {
-        await apiWriteLog(user, "設計図Pt初期化", `${series} を初めて所持したため 0 Pt に設定`);
-      }
-
-      await apiWriteLog(
-        user,
-        "所持変更",
-        `${item.name} を ${nextOwned ? "所持" : "未所持"} に変更`
-      );
-    } catch (e) {
-      console.error("GAS同期失敗(own)", e);
-    }
   }
 
   function addSeriesPoints(series: string, amount: number) {
-    if (!selectedUser) return;
+    if (!selectedUser || !isEditing || isSavingInput) return;
 
     const userName = selectedUser;
     const key = `${userName}::${series}`;
@@ -722,29 +823,10 @@ export default function Home() {
       return nextDrafts;
     });
 
-    // 連打のたびに古いリクエストを取り消し、400ms後に最新値だけ保存する
-    if (seriesSaveTimersRef.current[key]) clearTimeout(seriesSaveTimersRef.current[key]);
-    seriesSaveTimersRef.current[key] = setTimeout(() => {
-      const latest = latestSeriesPointsRef.current[key];
-      const previous = seriesSaveQueuesRef.current[key] ?? Promise.resolve();
-      const queued = previous
-        .catch(() => undefined)
-        .then(async () => {
-          await apiUpsertPt(userName, series, latest);
-          await apiWriteLog(userName, "設計図Pt変更", `${series} を ${latest} Pt に変更`);
-        })
-        .catch((e) => console.error("GAS同期失敗(pt)", e));
-
-      seriesSaveQueuesRef.current[key] = queued;
-      void queued.finally(() => {
-        if (seriesSaveQueuesRef.current[key] === queued) delete seriesSaveQueuesRef.current[key];
-      });
-      delete seriesSaveTimersRef.current[key];
-    }, 400);
   }
 
   function addUnusedPoints(cls: UnusedClass, amount: number) {
-    if (!selectedUser) return;
+    if (!selectedUser || !isEditing || isSavingInput) return;
 
     const userName = selectedUser;
     const key = `${userName}::${cls}`;
@@ -769,24 +851,6 @@ export default function Home() {
       return nextDrafts;
     });
 
-    if (unusedSaveTimersRef.current[key]) clearTimeout(unusedSaveTimersRef.current[key]);
-    unusedSaveTimersRef.current[key] = setTimeout(() => {
-      const latest = latestUnusedPointsRef.current[key];
-      const previous = unusedSaveQueuesRef.current[key] ?? Promise.resolve();
-      const queued = previous
-        .catch(() => undefined)
-        .then(async () => {
-          await apiUpsertUnusedPt(userName, cls, latest);
-          await apiWriteLog(userName, "未使用Pt変更", `${cls} を ${latest} Pt に変更`);
-        })
-        .catch((e) => console.error("GAS同期失敗(unused)", e));
-
-      unusedSaveQueuesRef.current[key] = queued;
-      void queued.finally(() => {
-        if (unusedSaveQueuesRef.current[key] === queued) delete unusedSaveQueuesRef.current[key];
-      });
-      delete unusedSaveTimersRef.current[key];
-    }, 400);
   }
 
   return (
@@ -862,6 +926,7 @@ export default function Home() {
           <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 8 }}>新しく記入する方はこちらから入力</div>
           <div style={{ display: "flex", gap: 8 }}>
             <input
+              disabled={isEditing || isSavingInput}
               value={newUserName}
               onChange={(e) => setNewUserName(e.target.value)}
               placeholder="例：ホルンARK"
@@ -869,6 +934,7 @@ export default function Home() {
             />
             <button
               className="primary-action"
+              disabled={isEditing || isSavingInput}
               onClick={async () => {
                 const { user: u, created } = ensureUser(newUserName);
                 if (!u) return;
@@ -952,6 +1018,7 @@ export default function Home() {
           <label style={{ fontSize: 12, color: "#374151" }}>ユーザー検索（プルダウン）</label>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
             <input
+              disabled={isEditing || isSavingInput}
               value={userQuery}
               onChange={(e) => setUserQuery(e.target.value)}
               placeholder="名前を入力すると候補が出ます"
@@ -960,6 +1027,7 @@ export default function Home() {
             />
             <button
               className="secondary-action"
+              disabled={isEditing || isSavingInput}
               onClick={() => {
                 const q = userQuery.trim();
                 if (!q) return;
@@ -1013,6 +1081,7 @@ export default function Home() {
                   }}
                 >
                   <button
+                    disabled={isEditing || isSavingInput}
                     onClick={() => setSelectedUser(name)}
                     style={{
                       flex: 1,
@@ -1030,6 +1099,10 @@ export default function Home() {
                   </button>
                   <Link
                     href={`/user/${encodeURIComponent(name)}`}
+                    aria-disabled={isEditing || isSavingInput}
+                    onClick={(event) => {
+                      if (isEditing || isSavingInput) event.preventDefault();
+                    }}
                     style={{
                       padding: "6px 9px",
                       borderRadius: 8,
@@ -1057,7 +1130,7 @@ export default function Home() {
           </div>
 
           <button
-            disabled={!selectedUser}
+            disabled={!selectedUser || isEditing || isSavingInput}
             onClick={() => {
               if (!selectedUser) return;
               const ok = confirm(`ユーザー「${selectedUser}」を削除しますか？（所持・Pt・未使用Ptも消えます）`);
@@ -1071,10 +1144,36 @@ export default function Home() {
               background: selectedUser ? "#fee2e2" : "#f3f4f6",
               color: selectedUser ? "#991b1b" : "#9ca3af",
               fontWeight: "bold",
-              cursor: selectedUser ? "pointer" : "not-allowed",
+              cursor: selectedUser && !isEditing && !isSavingInput ? "pointer" : "not-allowed",
             }}
           >
             選択中ユーザーを削除
+          </button>
+        </div>
+
+        <div className={`section-card edit-controls${isEditing ? " edit-controls-active" : ""}`}>
+          <div>
+            <div className="section-title">
+              {isEditing ? "入力中" : "入力はロックされています"}
+            </div>
+            <div className="section-note">
+              {!selectedUser
+                ? "ユーザーを選択してください"
+                : isEditing
+                  ? "変更内容はまだスプレッドシートに反映されていません"
+                  : "入力を変更するには、入力開始ボタンを押してください"}
+            </div>
+          </div>
+          <button
+            type="button"
+            className={isEditing ? "confirm-input-action" : "start-input-action"}
+            disabled={!selectedUser || isSavingInput}
+            onClick={() => {
+              if (isEditing) void confirmInput();
+              else startInput();
+            }}
+          >
+            {isSavingInput ? "反映中…" : isEditing ? "入力内容を反映する" : "入力を開始する"}
           </button>
         </div>
 
@@ -1169,6 +1268,7 @@ export default function Home() {
                     <div className="point-actions" style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                     <button
                       type="button"
+                      disabled={!isEditing || isSavingInput}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => void addSeriesPoints(s, -5)}
                       style={{
@@ -1186,6 +1286,7 @@ export default function Home() {
                     </button>
                     <input
                       type="number"
+                      disabled={!isEditing || isSavingInput}
                       inputMode="numeric"
                       min={0}
                       step={1}
@@ -1201,7 +1302,7 @@ export default function Home() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter") (e.target as HTMLInputElement).blur(); // Enterで確定
                       }}
-                      onBlur={async () => {
+                      onBlur={() => {
                         if (!selectedUser) return;
 
                         const raw = seriesDraftByUser[selectedUser]?.[s];
@@ -1211,10 +1312,6 @@ export default function Home() {
                         if (raw.trim() === "") {
                           const key = `${selectedUser}::${s}`;
                           latestSeriesPointsRef.current[key] = 0;
-                          if (seriesSaveTimersRef.current[key]) {
-                            clearTimeout(seriesSaveTimersRef.current[key]);
-                            delete seriesSaveTimersRef.current[key];
-                          }
                           setSeriesPointsByUser((prev) => ({
                             ...prev,
                             [selectedUser]: { ...(prev[selectedUser] || {}), [s]: undefined },
@@ -1229,22 +1326,12 @@ export default function Home() {
                             return next;
                           });
 
-                          try {
-                            await apiUpsertPt(selectedUser, s, null); // ← nullでclear（api側対応必須）
-                            await apiWriteLog(selectedUser, "設計図Ptクリア", `${s} のPtを空欄に変更`);
-                          } catch (err) {
-                            console.error("GAS同期失敗(pt)", err);
-                          }
                           return;
                         }
 
                         const val = clampInt(raw);
                         const key = `${selectedUser}::${s}`;
                         latestSeriesPointsRef.current[key] = val;
-                        if (seriesSaveTimersRef.current[key]) {
-                          clearTimeout(seriesSaveTimersRef.current[key]);
-                          delete seriesSaveTimersRef.current[key];
-                        }
 
                         setSeriesPointsByUser((prev) => ({
                           ...prev,
@@ -1260,12 +1347,6 @@ export default function Home() {
                           return next;
                         });
 
-                        try {
-                          await apiUpsertPt(selectedUser, s, val);
-                            await apiWriteLog(selectedUser, "設計図Pt変更", `${s} を ${val} Pt に変更`);
-                        } catch (err) {
-                          console.error("GAS同期失敗(pt)", err);
-                        }
                       }}
                       style={{
                         width: 40,
@@ -1278,6 +1359,7 @@ export default function Home() {
                     />
                     <button
                       type="button"
+                      disabled={!isEditing || isSavingInput}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => void addSeriesPoints(s, 5)}
                       style={{
@@ -1341,6 +1423,7 @@ export default function Home() {
                     <div className="point-actions" style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                     <button
                       type="button"
+                      disabled={!isEditing || isSavingInput}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => void addUnusedPoints(cls, -5)}
                       style={{
@@ -1358,6 +1441,7 @@ export default function Home() {
                     </button>
                     <input
                       type="number"
+                      disabled={!isEditing || isSavingInput}
                       inputMode="numeric"
                       min={0}
                       step={1}
@@ -1373,7 +1457,7 @@ export default function Home() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                       }}
-                      onBlur={async () => {
+                      onBlur={() => {
                         if (!selectedUser) return;
 
                         const raw = unusedDraftByUser[selectedUser]?.[cls];
@@ -1383,10 +1467,6 @@ export default function Home() {
                         if (raw.trim() === "") {
                           const key = `${selectedUser}::${cls}`;
                           latestUnusedPointsRef.current[key] = 0;
-                          if (unusedSaveTimersRef.current[key]) {
-                            clearTimeout(unusedSaveTimersRef.current[key]);
-                            delete unusedSaveTimersRef.current[key];
-                          }
                           setUnusedPointsByUser((prev) => ({
                             ...prev,
                             [selectedUser]: { ...(prev[selectedUser] || {}), [cls]: undefined as any },
@@ -1401,22 +1481,12 @@ export default function Home() {
                             return next;
                           });
 
-                          try {
-                            await apiUpsertUnusedPt(selectedUser, cls, null); // ← nullでclear（api側対応必須）
-                            await apiWriteLog(selectedUser, "未使用Ptクリア", `${cls} の未使用Ptを空欄に変更`);
-                          } catch (err) {
-                            console.error("GAS同期失敗(unused)", err);
-                          }
                           return;
                         }
 
                         const val = clampInt(raw);
                         const key = `${selectedUser}::${cls}`;
                         latestUnusedPointsRef.current[key] = val;
-                        if (unusedSaveTimersRef.current[key]) {
-                          clearTimeout(unusedSaveTimersRef.current[key]);
-                          delete unusedSaveTimersRef.current[key];
-                        }
 
                         setUnusedPointsByUser((prev) => ({
                           ...prev,
@@ -1432,12 +1502,6 @@ export default function Home() {
                           return next;
                         });
 
-                        try {
-                          await apiUpsertUnusedPt(selectedUser, cls, val);
-                            await apiWriteLog(selectedUser, "未使用Pt変更", `${cls} を ${val} Pt に変更`);
-                        } catch (err) {
-                          console.error("GAS同期失敗(unused)", err);
-                        }
                       }}
                       style={{
                         width: 40,
@@ -1449,6 +1513,7 @@ export default function Home() {
                     />
                     <button
                       type="button"
+                      disabled={!isEditing || isSavingInput}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => void addUnusedPoints(cls, 5)}
                       style={{
@@ -1505,6 +1570,7 @@ export default function Home() {
 
                     <button
                       className="owned-toggle"
+                      disabled={!isEditing || isSavingInput}
                       onClick={() => toggleOwned(selectedUser, it)}
                       style={{
                         width: 44,
@@ -1543,7 +1609,7 @@ export default function Home() {
           userSelect: "none",
         }}
       >
-        v1.212
+        v1.213
 </div>
 
       <style jsx>{`
