@@ -56,13 +56,6 @@ const CLASS_COLOR: Record<string, string> = {
 type UnusedPointsMap = Partial<Record<UnusedClass, number>>;
 type UnusedPointsByUserMap = Record<string, UnusedPointsMap>;
 
-type InputSnapshot = {
-  userName: string;
-  ownedList: OwnedItem[];
-  seriesPoints: SeriesPointsMap;
-  unusedPoints: UnusedPointsMap;
-};
-
 type ScrollState = {
   winY: number;
   seriesY: number;
@@ -175,14 +168,11 @@ export default function Home() {
   const [shipType, setShipType] = useState<ShipType>("全艦船");
   const [userQuery, setUserQuery] = useState<string>("");
   const [shipQuery, setShipQuery] = useState<string>("");
-  const [isEditing, setIsEditing] = useState(false);
-  const [isSavingInput, setIsSavingInput] = useState(false);
-
   const refSeriesBox = useRef<HTMLDivElement | null>(null);
   const refUnusedBox = useRef<HTMLDivElement | null>(null);
   const refOwnedBox = useRef<HTMLDivElement | null>(null);
-  const inputSnapshotRef = useRef<InputSnapshot | null>(null);
-  const isEditingRef = useRef(false);
+  const seriesSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const unusedSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // +5/-5を連打したときも、Reactの再描画を待たずに最新値を参照するためのref
   const latestSeriesPointsRef = useRef<Record<string, number>>({});
@@ -429,8 +419,6 @@ export default function Home() {
     let alive = true;
 
     const tick = async () => {
-      if (isEditingRef.current) return;
-
       try {
         const data = await apiExport();
         if (!alive) return;
@@ -462,29 +450,23 @@ export default function Home() {
 
   // ---------- localStorage 保存 ----------
   useEffect(() => {
-    if (isEditing) return;
     localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(users || {}));
-  }, [users, isEditing]);
+  }, [users]);
 
   useEffect(() => {
-    if (isEditing) return;
     localStorage.setItem(STORAGE_KEY_SERIES_POINTS_BY_USER, JSON.stringify(seriesPointsByUser || {}));
-  }, [seriesPointsByUser, isEditing]);
+  }, [seriesPointsByUser]);
 
   useEffect(() => {
-    if (isEditing) return;
     localStorage.setItem(STORAGE_KEY_UNUSED_POINTS_BY_USER, JSON.stringify(unusedPointsByUser || {}));
-  }, [unusedPointsByUser, isEditing]);
+  }, [unusedPointsByUser]);
 
   useEffect(() => {
-    if (!isEditing) return;
-
-    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
+    return () => {
+      Object.values(seriesSaveTimersRef.current).forEach(clearTimeout);
+      Object.values(unusedSaveTimersRef.current).forEach(clearTimeout);
     };
-    window.addEventListener("beforeunload", warnBeforeLeaving);
-    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
-  }, [isEditing]);
+  }, []);
 
   // ✅ 選択中ユーザーのPtマップ
   const seriesPoints: SeriesPointsMap = useMemo(() => {
@@ -664,104 +646,8 @@ export default function Home() {
     return list.some((x) => normalize(x.name) === key);
   }
 
-  function startInput() {
-    if (!selectedUser || isEditing) return;
-
-    inputSnapshotRef.current = {
-      userName: selectedUser,
-      ownedList: (users[selectedUser] || []).map((item) => ({ ...item })),
-      seriesPoints: { ...(seriesPointsByUser[selectedUser] || {}) },
-      unusedPoints: { ...(unusedPointsByUser[selectedUser] || {}) },
-    };
-    isEditingRef.current = true;
-    setIsEditing(true);
-  }
-
-  async function confirmInput() {
-    const snapshot = inputSnapshotRef.current;
-    if (!snapshot || !isEditing || isSavingInput || snapshot.userName !== selectedUser) return;
-
-    const userName = snapshot.userName;
-    const currentOwnedList = users[userName] || [];
-    const currentSeriesPoints: SeriesPointsMap = { ...(seriesPointsByUser[userName] || {}) };
-    const currentUnusedPoints: UnusedPointsMap = { ...(unusedPointsByUser[userName] || {}) };
-
-    for (const [series, raw] of Object.entries(seriesDraftByUser[userName] || {})) {
-      if (raw.trim() === "") delete currentSeriesPoints[series];
-      else currentSeriesPoints[series] = clampInt(raw);
-    }
-    for (const [cls, raw] of Object.entries(unusedDraftByUser[userName] || {})) {
-      const unusedClass = cls as UnusedClass;
-      if (raw.trim() === "") delete currentUnusedPoints[unusedClass];
-      else currentUnusedPoints[unusedClass] = clampInt(raw);
-    }
-
-    const requireSuccess = (result: { ok?: boolean; error?: string } | undefined) => {
-      if (!result?.ok) throw new Error(result?.error || "スプレッドシートへの保存に失敗しました");
-    };
-
-    setIsSavingInput(true);
-    try {
-      const beforeOwned = new Map(snapshot.ownedList.map((item) => [normalize(item.name), item]));
-      const afterOwned = new Map(currentOwnedList.map((item) => [normalize(item.name), item]));
-      const ownedNames = new Set([...beforeOwned.keys(), ...afterOwned.keys()]);
-
-      for (const name of ownedNames) {
-        const before = beforeOwned.has(name);
-        const after = afterOwned.has(name);
-        if (before === after) continue;
-
-        const item = afterOwned.get(name) || beforeOwned.get(name);
-        if (!item) continue;
-        requireSuccess(await apiUpsertOwn(userName, item.name, item.type, guessSeries(item.name), after));
-      }
-
-      const seriesNames = new Set([
-        ...Object.keys(snapshot.seriesPoints),
-        ...Object.keys(currentSeriesPoints),
-      ]);
-      for (const series of seriesNames) {
-        const before = snapshot.seriesPoints[series];
-        const after = currentSeriesPoints[series];
-        if (before === after) continue;
-        requireSuccess(await apiUpsertPt(userName, series, after ?? null));
-      }
-
-      for (const cls of UNUSED_CLASSES) {
-        const before = snapshot.unusedPoints[cls];
-        const after = currentUnusedPoints[cls];
-        if (before === after) continue;
-        requireSuccess(await apiUpsertUnusedPt(userName, cls, after ?? null));
-      }
-
-      setSeriesPointsByUser((prev) => ({
-        ...prev,
-        [userName]: currentSeriesPoints,
-      }));
-      setUnusedPointsByUser((prev) => ({
-        ...prev,
-        [userName]: currentUnusedPoints,
-      }));
-      setSeriesDraftByUser((prev) => ({ ...prev, [userName]: {} }));
-      setUnusedDraftByUser((prev) => ({ ...prev, [userName]: {} }));
-
-      await apiWriteLog(userName, "入力確定", "所持モデル・設計図Pt・未使用Ptをまとめて反映");
-      inputSnapshotRef.current = null;
-      isEditingRef.current = false;
-      setIsEditing(false);
-      alert("入力内容を反映しました");
-    } catch (error) {
-      console.error("入力内容の一括反映に失敗", error);
-      alert("入力内容を反映できませんでした。通信状態を確認して、もう一度お試しください。");
-    } finally {
-      setIsSavingInput(false);
-    }
-  }
-
   // ---------- 所持トグル ----------
-  function toggleOwned(user: string, item: OwnedItem) {
-    if (!isEditing || isSavingInput) return;
-
+  async function toggleOwned(user: string, item: OwnedItem) {
     const key = normalize(item.name);
     const currentList = users[user] || [];
     const has = currentList.some((x) => normalize(x.name) === key);
@@ -794,10 +680,47 @@ export default function Home() {
       });
     }
 
+    try {
+      await apiUpsertOwn(user, item.name, item.type, series, nextOwned);
+      await apiWriteLog(user, "所持変更", `${item.name}：${nextOwned ? "所有" : "未所有"}`);
+    } catch (error) {
+      console.error("所持状態の保存に失敗", error);
+    }
+
+  }
+
+  function scheduleSeriesSave(userName: string, series: string, pt: number | null) {
+    const key = `${userName}::${series}`;
+    clearTimeout(seriesSaveTimersRef.current[key]);
+    seriesSaveTimersRef.current[key] = setTimeout(async () => {
+      try {
+        await apiUpsertPt(userName, series, pt);
+        await apiWriteLog(userName, "技術Pt変更", `${series}：${pt === null ? "空欄" : pt}`);
+      } catch (error) {
+        console.error("技術Ptの保存に失敗", error);
+      } finally {
+        delete seriesSaveTimersRef.current[key];
+      }
+    }, 350);
+  }
+
+  function scheduleUnusedSave(userName: string, cls: UnusedClass, pt: number | null) {
+    const key = `${userName}::${cls}`;
+    clearTimeout(unusedSaveTimersRef.current[key]);
+    unusedSaveTimersRef.current[key] = setTimeout(async () => {
+      try {
+        await apiUpsertUnusedPt(userName, cls, pt);
+        await apiWriteLog(userName, "未使用Pt変更", `${cls}：${pt === null ? "空欄" : pt}`);
+      } catch (error) {
+        console.error("未使用Ptの保存に失敗", error);
+      } finally {
+        delete unusedSaveTimersRef.current[key];
+      }
+    }, 350);
   }
 
   function addSeriesPoints(series: string, amount: number) {
-    if (!selectedUser || !isEditing || isSavingInput) return;
+    if (!selectedUser) return;
 
     const userName = selectedUser;
     const key = `${userName}::${series}`;
@@ -823,10 +746,12 @@ export default function Home() {
       return nextDrafts;
     });
 
+    scheduleSeriesSave(userName, series, next);
+
   }
 
   function addUnusedPoints(cls: UnusedClass, amount: number) {
-    if (!selectedUser || !isEditing || isSavingInput) return;
+    if (!selectedUser) return;
 
     const userName = selectedUser;
     const key = `${userName}::${cls}`;
@@ -850,6 +775,8 @@ export default function Home() {
       nextDrafts[userName] = userDrafts;
       return nextDrafts;
     });
+
+    scheduleUnusedSave(userName, cls, next);
 
   }
 
@@ -926,7 +853,6 @@ export default function Home() {
           <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 8 }}>新しく記入する方はこちらから入力</div>
           <div style={{ display: "flex", gap: 8 }}>
             <input
-              disabled={isEditing || isSavingInput}
               value={newUserName}
               onChange={(e) => setNewUserName(e.target.value)}
               placeholder="例：ホルンARK"
@@ -934,7 +860,6 @@ export default function Home() {
             />
             <button
               className="primary-action"
-              disabled={isEditing || isSavingInput}
               onClick={async () => {
                 const { user: u, created } = ensureUser(newUserName);
                 if (!u) return;
@@ -1018,7 +943,6 @@ export default function Home() {
           <label style={{ fontSize: 12, color: "#374151" }}>ユーザー検索（プルダウン）</label>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
             <input
-              disabled={isEditing || isSavingInput}
               value={userQuery}
               onChange={(e) => setUserQuery(e.target.value)}
               placeholder="名前を入力すると候補が出ます"
@@ -1027,7 +951,6 @@ export default function Home() {
             />
             <button
               className="secondary-action"
-              disabled={isEditing || isSavingInput}
               onClick={() => {
                 const q = userQuery.trim();
                 if (!q) return;
@@ -1081,7 +1004,6 @@ export default function Home() {
                   }}
                 >
                   <button
-                    disabled={isEditing || isSavingInput}
                     onClick={() => setSelectedUser(name)}
                     style={{
                       flex: 1,
@@ -1099,10 +1021,6 @@ export default function Home() {
                   </button>
                   <Link
                     href={`/user/${encodeURIComponent(name)}`}
-                    aria-disabled={isEditing || isSavingInput}
-                    onClick={(event) => {
-                      if (isEditing || isSavingInput) event.preventDefault();
-                    }}
                     style={{
                       padding: "6px 9px",
                       borderRadius: 8,
@@ -1130,7 +1048,7 @@ export default function Home() {
           </div>
 
           <button
-            disabled={!selectedUser || isEditing || isSavingInput}
+            disabled={!selectedUser}
             onClick={() => {
               if (!selectedUser) return;
               const ok = confirm(`ユーザー「${selectedUser}」を削除しますか？（所持・Pt・未使用Ptも消えます）`);
@@ -1144,36 +1062,10 @@ export default function Home() {
               background: selectedUser ? "#fee2e2" : "#f3f4f6",
               color: selectedUser ? "#991b1b" : "#9ca3af",
               fontWeight: "bold",
-              cursor: selectedUser && !isEditing && !isSavingInput ? "pointer" : "not-allowed",
+              cursor: selectedUser ? "pointer" : "not-allowed",
             }}
           >
             選択中ユーザーを削除
-          </button>
-        </div>
-
-        <div className={`section-card edit-controls${isEditing ? " edit-controls-active" : ""}`}>
-          <div>
-            <div className="section-title">
-              {isEditing ? "入力中" : "入力はロックされています"}
-            </div>
-            <div className="section-note">
-              {!selectedUser
-                ? "ユーザーを選択してください"
-                : isEditing
-                  ? "変更内容はまだスプレッドシートに反映されていません"
-                  : "入力を変更するには、入力開始ボタンを押してください"}
-            </div>
-          </div>
-          <button
-            type="button"
-            className={isEditing ? "confirm-input-action" : "start-input-action"}
-            disabled={!selectedUser || isSavingInput}
-            onClick={() => {
-              if (isEditing) void confirmInput();
-              else startInput();
-            }}
-          >
-            {isSavingInput ? "反映中…" : isEditing ? "入力内容を反映する" : "入力を開始する"}
           </button>
         </div>
 
@@ -1268,7 +1160,6 @@ export default function Home() {
                     <div className="point-actions" style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                     <button
                       type="button"
-                      disabled={!isEditing || isSavingInput}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => void addSeriesPoints(s, -5)}
                       style={{
@@ -1286,7 +1177,6 @@ export default function Home() {
                     </button>
                     <input
                       type="number"
-                      disabled={!isEditing || isSavingInput}
                       inputMode="numeric"
                       min={0}
                       step={1}
@@ -1304,48 +1194,53 @@ export default function Home() {
                       }}
                       onBlur={() => {
                         if (!selectedUser) return;
+                        const userName = selectedUser;
 
-                        const raw = seriesDraftByUser[selectedUser]?.[s];
+                        const raw = seriesDraftByUser[userName]?.[s];
                         if (raw === undefined) return; // 触ってない
 
                         // 空欄 → クリア（GASもクリア）
                         if (raw.trim() === "") {
-                          const key = `${selectedUser}::${s}`;
+                          const key = `${userName}::${s}`;
                           latestSeriesPointsRef.current[key] = 0;
                           setSeriesPointsByUser((prev) => ({
                             ...prev,
-                            [selectedUser]: { ...(prev[selectedUser] || {}), [s]: undefined },
+                            [userName]: { ...(prev[userName] || {}), [s]: undefined },
                           }));
 
                           // draft消す
                           setSeriesDraftByUser((prev) => {
                             const next = { ...prev };
-                            const u = { ...(next[selectedUser] || {}) };
+                            const u = { ...(next[userName] || {}) };
                             delete u[s];
-                            next[selectedUser] = u;
+                            next[userName] = u;
                             return next;
                           });
+
+                          scheduleSeriesSave(userName, s, null);
 
                           return;
                         }
 
                         const val = clampInt(raw);
-                        const key = `${selectedUser}::${s}`;
+                        const key = `${userName}::${s}`;
                         latestSeriesPointsRef.current[key] = val;
 
                         setSeriesPointsByUser((prev) => ({
                           ...prev,
-                          [selectedUser]: { ...(prev[selectedUser] || {}), [s]: val },
+                          [userName]: { ...(prev[userName] || {}), [s]: val },
                         }));
 
                         // draft消す
                         setSeriesDraftByUser((prev) => {
                           const next = { ...prev };
-                          const u = { ...(next[selectedUser] || {}) };
+                          const u = { ...(next[userName] || {}) };
                           delete u[s];
-                          next[selectedUser] = u;
+                          next[userName] = u;
                           return next;
                         });
+
+                        scheduleSeriesSave(userName, s, val);
 
                       }}
                       style={{
@@ -1359,7 +1254,6 @@ export default function Home() {
                     />
                     <button
                       type="button"
-                      disabled={!isEditing || isSavingInput}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => void addSeriesPoints(s, 5)}
                       style={{
@@ -1423,7 +1317,6 @@ export default function Home() {
                     <div className="point-actions" style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                     <button
                       type="button"
-                      disabled={!isEditing || isSavingInput}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => void addUnusedPoints(cls, -5)}
                       style={{
@@ -1441,7 +1334,6 @@ export default function Home() {
                     </button>
                     <input
                       type="number"
-                      disabled={!isEditing || isSavingInput}
                       inputMode="numeric"
                       min={0}
                       step={1}
@@ -1459,48 +1351,53 @@ export default function Home() {
                       }}
                       onBlur={() => {
                         if (!selectedUser) return;
+                        const userName = selectedUser;
 
-                        const raw = unusedDraftByUser[selectedUser]?.[cls];
+                        const raw = unusedDraftByUser[userName]?.[cls];
                         if (raw === undefined) return; // 触ってない
 
                         // 空欄 → クリア（GASもクリア）
                         if (raw.trim() === "") {
-                          const key = `${selectedUser}::${cls}`;
+                          const key = `${userName}::${cls}`;
                           latestUnusedPointsRef.current[key] = 0;
                           setUnusedPointsByUser((prev) => ({
                             ...prev,
-                            [selectedUser]: { ...(prev[selectedUser] || {}), [cls]: undefined as any },
+                            [userName]: { ...(prev[userName] || {}), [cls]: undefined as any },
                           }));
 
                           // draft消す
                           setUnusedDraftByUser((prev) => {
                             const next = { ...prev };
-                            const u = { ...(next[selectedUser] || {}) };
+                            const u = { ...(next[userName] || {}) };
                             delete u[cls];
-                            next[selectedUser] = u;
+                            next[userName] = u;
                             return next;
                           });
+
+                          scheduleUnusedSave(userName, cls, null);
 
                           return;
                         }
 
                         const val = clampInt(raw);
-                        const key = `${selectedUser}::${cls}`;
+                        const key = `${userName}::${cls}`;
                         latestUnusedPointsRef.current[key] = val;
 
                         setUnusedPointsByUser((prev) => ({
                           ...prev,
-                          [selectedUser]: { ...(prev[selectedUser] || {}), [cls]: val as any },
+                          [userName]: { ...(prev[userName] || {}), [cls]: val as any },
                         }));
 
                         // draft消す
                         setUnusedDraftByUser((prev) => {
                           const next = { ...prev };
-                          const u = { ...(next[selectedUser] || {}) };
+                          const u = { ...(next[userName] || {}) };
                           delete u[cls];
-                          next[selectedUser] = u;
+                          next[userName] = u;
                           return next;
                         });
+
+                        scheduleUnusedSave(userName, cls, val);
 
                       }}
                       style={{
@@ -1513,7 +1410,6 @@ export default function Home() {
                     />
                     <button
                       type="button"
-                      disabled={!isEditing || isSavingInput}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => void addUnusedPoints(cls, 5)}
                       style={{
@@ -1570,7 +1466,6 @@ export default function Home() {
 
                     <button
                       className="owned-toggle"
-                      disabled={!isEditing || isSavingInput}
                       onClick={() => toggleOwned(selectedUser, it)}
                       style={{
                         width: 44,
