@@ -58,6 +58,10 @@ function doPost(e) {
       ));
     }
 
+    if (action === "batchUpsertOwn") {
+      return jsonOut_(batchUpsertOwn_(body.changes));
+    }
+
     if (action === "upsertPt") {
       return jsonOut_(upsertPt_(
         String(body.userName || "").trim(),
@@ -176,6 +180,37 @@ function upsertOwn_(userName, shipName, series, own) {
     series: series,
     seriesColLetter: seriesColLetter,
     initializedSeriesPt: initializedSeriesPt,
+  };
+}
+
+function batchUpsertOwn_(changes) {
+  if (!Array.isArray(changes) || changes.length === 0) {
+    return { ok: false, error: "empty ownership changes" };
+  }
+
+  // sendBeaconの上限を超えるような異常なリクエストを受け付けない。
+  if (changes.length > 500) {
+    return { ok: false, error: "too many ownership changes" };
+  }
+
+  const results = changes.map(function (change) {
+    return upsertOwn_(
+      String(change.userName || "").trim(),
+      String(change.shipName || "").trim(),
+      String(change.series || "").trim(),
+      change.own
+    );
+  });
+
+  const failed = results.filter(function (result) {
+    return !result || result.ok !== true;
+  });
+
+  return {
+    ok: failed.length === 0,
+    processed: results.length,
+    failed: failed,
+    results: results,
   };
 }
 

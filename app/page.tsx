@@ -56,6 +56,14 @@ const CLASS_COLOR: Record<string, string> = {
 type UnusedPointsMap = Partial<Record<UnusedClass, number>>;
 type UnusedPointsByUserMap = Record<string, UnusedPointsMap>;
 
+type PendingOwnershipChange = {
+  userName: string;
+  shipName: string;
+  shipType: string;
+  series: string;
+  own: number;
+};
+
 type ScrollState = {
   winY: number;
   seriesY: number;
@@ -174,6 +182,7 @@ export default function Home() {
   const seriesSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const unusedSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const ownershipSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingOwnershipRef = useRef<Map<string, PendingOwnershipChange>>(new Map());
 
   // +5/-5を連打したときも、Reactの再描画を待たずに最新値を参照するためのref
   const latestSeriesPointsRef = useRef<Record<string, number>>({});
@@ -496,6 +505,29 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    const flushPendingOwnership = () => {
+      const changes = Array.from(pendingOwnershipRef.current.values());
+      if (changes.length === 0) return;
+
+      const body = JSON.stringify({ action: "batchUpsertOwn", changes });
+      const blob = new Blob([body], { type: "text/plain;charset=UTF-8" });
+
+      // ページを閉じた後もブラウザに送信を継続させる。
+      const queued = navigator.sendBeacon("/api/gas", blob);
+      if (!queued) {
+        void fetch("/api/gas", {
+          method: "POST",
+          body,
+          keepalive: true,
+        });
+      }
+    };
+
+    window.addEventListener("pagehide", flushPendingOwnership);
+    return () => window.removeEventListener("pagehide", flushPendingOwnership);
+  }, []);
+
   // ✅ 選択中ユーザーのPtマップ
   const seriesPoints: SeriesPointsMap = useMemo(() => {
     if (!selectedUser) return {};
@@ -680,9 +712,24 @@ export default function Home() {
     series: string,
     nextOwned: boolean
   ) {
+    const pendingKey = `${user}::${normalize(item.name)}`;
+    const pendingChange: PendingOwnershipChange = {
+      userName: user,
+      shipName: item.name,
+      shipType: item.type,
+      series,
+      own: nextOwned ? 1 : 0,
+    };
+    pendingOwnershipRef.current.set(pendingKey, pendingChange);
+
     const save = async () => {
       await apiUpsertOwn(user, item.name, item.type, series, nextOwned);
       await apiWriteLog(user, "所持変更", `${item.name}：${nextOwned ? "所有" : "未所有"}`);
+
+      const latestPending = pendingOwnershipRef.current.get(pendingKey);
+      if (latestPending?.own === pendingChange.own) {
+        pendingOwnershipRef.current.delete(pendingKey);
+      }
     };
 
     // 連打されてもGASへは必ず1件ずつ順番に送る。
@@ -1542,7 +1589,7 @@ export default function Home() {
           userSelect: "none",
         }}
       >
-        v1.214
+        v1.215
 </div>
 
       <style jsx>{`
