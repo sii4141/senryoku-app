@@ -793,7 +793,13 @@ export default function Home() {
       await apiWriteLog(
         userNames.length === 1 ? userNames[0] : "複数ユーザー",
         "所有変更",
-        `${changes.length}件を一括反映`
+        [
+          `${changes.length}件を一括反映`,
+          ...changes.map((change, index) =>
+            `${index + 1}. ${change.userName} / ${change.shipName} / ${change.own ? "所有（◯）" : "非所有（-）"}` +
+            (change.series ? ` / シリーズ:${change.series}` : "")
+          ),
+        ].join("\n")
       );
       setOwnershipSaveStatus("saved");
     } catch (error) {
@@ -919,7 +925,15 @@ export default function Home() {
       await apiWriteLog(
         userNames.length === 1 ? userNames[0] : "複数ユーザー",
         "ポイント変更",
-        `${changes.length}件を一括反映`
+        [
+          `${changes.length}件を一括反映`,
+          ...changes.map((change, index) => {
+            const target = change.kind === "series" ? change.series : change.cls;
+            const pointType = change.kind === "series" ? "技術Pt" : "未使用Pt";
+            const value = change.pt === null ? "空欄（クリア）" : String(change.pt);
+            return `${index + 1}. ${change.userName} / ${pointType} / ${target} / ${value}`;
+          }),
+        ].join("\n")
       );
       setPointSaveStatus("saved");
     } catch (error) {
@@ -1366,6 +1380,7 @@ export default function Home() {
                   background: pointSaveStatus === "error" ? "#fee2e2" : "#dff3f6",
                 }}
               >
+                {pointSaveStatus === "saving" && <span className="save-spinner" aria-hidden="true" />}
                 {pointStatusText}
               </div>
             )}
@@ -1544,6 +1559,7 @@ export default function Home() {
                   background: pointSaveStatus === "error" ? "#fee2e2" : "#dff3f6",
                 }}
               >
+                {pointSaveStatus === "saving" && <span className="save-spinner" aria-hidden="true" />}
                 {pointStatusText}
               </div>
             )}
@@ -1715,7 +1731,9 @@ export default function Home() {
                 }}
               >
                 {ownershipSaveStatus === "pending" && `保存待ち ${ownershipPendingCount}件`}
-                {ownershipSaveStatus === "saving" && "保存中…"}
+                {ownershipSaveStatus === "saving" && (
+                  <><span className="save-spinner" aria-hidden="true" />保存中…</>
+                )}
                 {ownershipSaveStatus === "saved" && "保存済み"}
                 {ownershipSaveStatus === "error" && `未保存 ${ownershipPendingCount}件`}
               </div>
@@ -1787,10 +1805,26 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.218
+        v1.219
 </div>
 
       <style jsx>{`
+        .save-spinner {
+          display: inline-block;
+          width: 12px;
+          height: 12px;
+          margin-right: 6px;
+          vertical-align: -2px;
+          border: 2px solid rgba(13, 91, 105, 0.25);
+          border-top-color: currentColor;
+          border-radius: 50%;
+          animation: save-spinner-rotate 0.7s linear infinite;
+        }
+
+        @keyframes save-spinner-rotate {
+          to { transform: rotate(360deg); }
+        }
+
         @media (max-width: 700px) {
           .point-grid {
             grid-template-columns: minmax(0, 1fr) !important;
