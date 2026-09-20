@@ -241,20 +241,26 @@ export default function UserDetailPage() {
 
               <ClassPieChart rows={classRows} grandTotal={grandTotal} />
 
-              <div style={{ overflowX: "auto", marginTop: 18 }}>
+              <div style={{ width: "100%", minWidth: 0, marginTop: 18 }}>
                 <table
                   style={{
                     width: "100%",
                     borderCollapse: "collapse",
-                    minWidth: 560,
+                    tableLayout: "fixed",
                   }}
                 >
+                  <colgroup>
+                    <col style={{ width: "34%" }} />
+                    <col style={{ width: "22%" }} />
+                    <col style={{ width: "22%" }} />
+                    <col style={{ width: "22%" }} />
+                  </colgroup>
                   <thead>
                     <tr style={{ background: "#111827", color: "white" }}>
-                      <th style={thStyle}>艦種</th>
-                      <th style={{ ...thStyle, textAlign: "right" }}>設計図Pt</th>
-                      <th style={{ ...thStyle, textAlign: "right" }}>未使用Pt</th>
-                      <th style={{ ...thStyle, textAlign: "right" }}>合計Pt</th>
+                      <th style={{ ...compactThStyle, textAlign: "left" }}>艦種</th>
+                      <th style={compactThStyle}>設計図Pt</th>
+                      <th style={compactThStyle}>未使用Pt</th>
+                      <th style={compactThStyle}>合計Pt</th>
                     </tr>
                   </thead>
 
@@ -277,7 +283,7 @@ export default function UserDetailPage() {
                         >
                           <td
                             style={{
-                              ...tdStyle,
+                              ...compactTdStyle,
                               fontWeight: 800,
                               background: backgroundColor,
                               color: textColor,
@@ -288,7 +294,7 @@ export default function UserDetailPage() {
 
                           <td
                             style={{
-                              ...tdStyle,
+                              ...compactTdStyle,
                               textAlign: "right",
                               background: backgroundColor,
                               color: textColor,
@@ -299,7 +305,7 @@ export default function UserDetailPage() {
 
                           <td
                             style={{
-                              ...tdStyle,
+                              ...compactTdStyle,
                               textAlign: "right",
                               background: backgroundColor,
                               color: textColor,
@@ -310,7 +316,7 @@ export default function UserDetailPage() {
 
                           <td
                             style={{
-                              ...tdStyle,
+                              ...compactTdStyle,
                               textAlign: "right",
                               fontWeight: 800,
                               background: backgroundColor,
@@ -908,4 +914,21 @@ const thStyle: React.CSSProperties = {
 const tdStyle: React.CSSProperties = {
   padding: "11px 10px",
   verticalAlign: "middle",
+};
+
+const compactThStyle: React.CSSProperties = {
+  padding: "10px 4px",
+  textAlign: "right",
+  whiteSpace: "normal",
+  wordBreak: "keep-all",
+  fontSize: "clamp(11px, 3.2vw, 14px)",
+};
+
+const compactTdStyle: React.CSSProperties = {
+  padding: "10px 4px",
+  verticalAlign: "middle",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  fontSize: "clamp(11px, 3.2vw, 14px)",
 };
