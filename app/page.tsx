@@ -1173,7 +1173,7 @@ export default function Home() {
             gap: 8,
             padding: 8,
             border: "1px solid rgba(17, 24, 39, 0.14)",
-            borderRadius: expanded ? "12px 12px 0 0" : 12,
+            borderRadius: 12,
             background: CLASS_COLOR[parentClass] || CLASS_COLOR[classifyByName(childItems[0]?.name || "")] || "#f3f4f6",
             color: "#111827",
           }}
@@ -1227,7 +1227,7 @@ export default function Home() {
         </div>
 
         {expanded && (
-          <div style={{ border: "1px solid rgba(17, 24, 39, 0.14)", borderTop: 0, borderRadius: "0 0 12px 12px", overflow: "hidden" }}>
+          <div style={{ marginTop: 6, padding: "6px 6px 0", border: "1px solid rgba(17, 24, 39, 0.14)", borderRadius: 12, background: "rgba(255, 255, 255, 0.5)", overflow: "hidden" }}>
             {childItems.map((item, index) =>
               renderOwnedItem(item, `${item.name}__${group.series}__${index}`)
             )}
