@@ -173,6 +173,11 @@ function clampInt(v: string) {
   return n;
 }
 
+function displayOwnedItemName(name: string) {
+  if (!FOLDABLE_MODULE_CLASSES.has(classifyByName(name))) return name;
+  return name.replace(/\s*[（(][^（）()]+[）)]\s*$/, "");
+}
+
 function formatJstTimestamp(date = new Date()) {
   const parts = new Intl.DateTimeFormat("ja-JP", {
     timeZone: "Asia/Tokyo",
@@ -1147,7 +1152,7 @@ export default function Home() {
         style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "10px 8px", marginBottom: 6, border: "1px solid rgba(17, 24, 39, 0.1)", borderRadius: 10, background: bgColor }}
       >
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>{item.name}</div>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>{displayOwnedItemName(item.name)}</div>
           <div style={{ fontSize: 12, color: "#000000" }}>
             {cls} / {series ? `シリーズ:${series} / Pt:${pt}` : "シリーズ未判定 / Pt:0"}
           </div>
@@ -1763,6 +1768,24 @@ export default function Home() {
               </div>
             )}
             </div>
+          </div>
+
+          <div
+            role="note"
+            style={{
+              marginBottom: 8,
+              padding: "10px 12px",
+              border: "1px solid #bfdbfe",
+              borderRadius: 10,
+              background: "#eff6ff",
+              color: "#1e3a5f",
+              fontSize: 12,
+              lineHeight: 1.65,
+            }}
+          >
+            <div style={{ fontWeight: 800 }}>入力方法</div>
+            <div>① 艦種をタップ → ② シリーズ・親艦をタップ → ③ 設計図・モジュールを表示</div>
+            <div>技術Ptはシリーズ・親艦の右側、所有◯は展開後の一覧で入力します。</div>
           </div>
 
           {!selectedUser ? (
