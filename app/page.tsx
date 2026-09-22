@@ -162,6 +162,8 @@ const STORAGE_KEY_UNUSED_POINTS_BY_USER = "senryoku_unused_points_by_user_local_
 const STORAGE_KEY_SELECTED_USER = "senryoku_selected_user_v1";
 const STORAGE_KEY_UI_STATE = "senryoku_ui_state_v1";
 const STORAGE_KEY_SCROLL_STATE = "senryoku_scroll_state_v1";
+const OWNERSHIP_SAVE_DELAY_MS = 10_000;
+const POINT_SAVE_DELAY_MS = 10_000;
 
 
 function clampInt(v: string) {
@@ -876,7 +878,7 @@ export default function Home() {
     if (ownershipSaveTimerRef.current) clearTimeout(ownershipSaveTimerRef.current);
     ownershipSaveTimerRef.current = setTimeout(() => {
       void flushOwnershipChanges();
-    }, 1000);
+    }, OWNERSHIP_SAVE_DELAY_MS);
   }
 
   async function flushOwnershipChanges() {
@@ -1008,7 +1010,7 @@ export default function Home() {
     if (pointSaveTimerRef.current) clearTimeout(pointSaveTimerRef.current);
     pointSaveTimerRef.current = setTimeout(() => {
       void flushPointChanges();
-    }, 1000);
+    }, POINT_SAVE_DELAY_MS);
   }
 
   async function flushPointChanges() {
