@@ -220,7 +220,6 @@ export default function Home() {
   const [pointSaveStatus, setPointSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
   const [pointPendingCount, setPointPendingCount] = useState(0);
   const [expandedOwnershipClasses, setExpandedOwnershipClasses] = useState<Partial<Record<OwnershipClass, boolean>>>({});
-  const [expandedPointClasses, setExpandedPointClasses] = useState<Partial<Record<OwnershipClass, boolean>>>({});
   const [expandedModuleGroups, setExpandedModuleGroups] = useState<Partial<Record<string, boolean>>>({});
   const refSeriesBox = useRef<HTMLDivElement | null>(null);
   const refUnusedBox = useRef<HTMLDivElement | null>(null);
@@ -784,13 +783,6 @@ export default function Home() {
     })).filter((entry) => entry.groups.length > 0);
   }, [ownershipGroups]);
 
-  const pointSeriesClassGroups = useMemo(() => {
-    return OWNERSHIP_CLASS_ORDER.map((className) => ({
-      className,
-      series: SERIES_NAMES.filter((series) => CLASS_BY_SERIES[series] === className),
-    })).filter((entry) => entry.series.length > 0);
-  }, []);
-
   const groupedSeries = useMemo(() => new Set(ownershipGroups.map((group) => group.series)), [ownershipGroups]);
 
   const regularCatalog = useMemo(
@@ -1210,6 +1202,8 @@ export default function Home() {
             {groupLabel}
           </button>
 
+          {renderSeriesPointRow(group.series)}
+
           {isCapitalGroup && parentItem && (
             <button
               className="owned-toggle"
@@ -1246,28 +1240,12 @@ export default function Home() {
   function renderSeriesPointRow(series: string) {
     if (!selectedUser) return null;
 
-    const cls = CLASS_BY_SERIES[series];
     const saved = seriesPointsByUser[selectedUser]?.[series];
     const draft = seriesDraftByUser[selectedUser]?.[series];
     const displayValue = draft !== undefined ? draft : (saved === undefined ? "" : String(saved));
 
     return (
-      <div
-        key={series}
-        className="point-row"
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 8,
-          border: "1px solid #f3f4f6",
-          borderRadius: 10,
-          padding: 8,
-          background: CLASS_COLOR[cls] || "#ffffff",
-        }}
-      >
-        <div className="point-name" style={{ fontSize: 13, fontWeight: 600 }}>{series}</div>
-        <div className="point-actions" style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+      <div className="point-actions" style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
           <button
             type="button"
             onMouseDown={(event) => event.preventDefault()}
@@ -1334,7 +1312,7 @@ export default function Home() {
               });
               scheduleSeriesSave(userName, series, value);
             }}
-            style={{ width: 40, padding: 8, border: "1px solid #d1d5db", borderRadius: 10, textAlign: "right" }}
+            style={{ width: 48, padding: 8, border: "1px solid #d1d5db", borderRadius: 10, textAlign: "right" }}
           />
           <button
             type="button"
@@ -1345,7 +1323,6 @@ export default function Home() {
           >
             +5
           </button>
-        </div>
       </div>
     );
   }
@@ -1691,10 +1668,38 @@ export default function Home() {
           </select>
         </div>
 
-        {/* Pt設定(設計図ごと)*/}
-        <div className="section-card" style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, marginBottom: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 6 }}>
-            <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 0 }}>技術Ptの数を入力（設計図ごと）</div>
+
+
+
+
+
+
+        {/* 所持 */}
+        <div className="section-card" style={{ marginBottom: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+            <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 0 }}>技術Pt・所持モデル・モジュール入力</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {ownershipSaveStatus !== "idle" && (
+              <div
+                aria-live="polite"
+                style={{
+                  flexShrink: 0,
+                  padding: "5px 9px",
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: ownershipSaveStatus === "error" ? "#991b1b" : "#0d5b69",
+                  background: ownershipSaveStatus === "error" ? "#fee2e2" : "#dff3f6",
+                }}
+              >
+                所有: {ownershipSaveStatus === "pending" && `保存待ち ${ownershipPendingCount}件`}
+                {ownershipSaveStatus === "saving" && (
+                  <><span className="save-spinner" aria-hidden="true" />保存中…</>
+                )}
+                {ownershipSaveStatus === "saved" && "保存済み"}
+                {ownershipSaveStatus === "error" && `未保存 ${ownershipPendingCount}件`}
+              </div>
+            )}
             {pointStatusText && (
               <div
                 aria-live="polite"
@@ -1708,25 +1713,29 @@ export default function Home() {
                   background: pointSaveStatus === "error" ? "#fee2e2" : "#dff3f6",
                 }}
               >
-                {pointSaveStatus === "saving" && <span className="save-spinner" aria-hidden="true" />}
+                Pt: {pointSaveStatus === "saving" && <span className="save-spinner" aria-hidden="true" />}
                 {pointStatusText}
               </div>
             )}
+            </div>
           </div>
-           <div className="section-note" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 6 }}>ポイントを振っていない場合でも、設計図を所持していれば0を入力してください</div>
 
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
           ) : (
-            <div ref={refSeriesBox} style={{ maxHeight: 320, overflow: "auto" }}>
-              {pointSeriesClassGroups.map(({ className, series }) => {
-                const expanded = Boolean(expandedPointClasses[className]);
+            <div ref={refOwnedBox} className="owned-list" style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, maxHeight: 420, overflow: "auto" }}>
+              {regularCatalog.map((item, index) =>
+                renderOwnedItem(item, `${item.name}__regular__${index}`)
+              )}
+
+              {ownershipClassGroups.map(({ className, groups }) => {
+                const expanded = Boolean(expandedOwnershipClasses[className]);
                 return (
-                  <div key={className} style={{ marginBottom: 8 }}>
+                  <div key={className} style={{ marginTop: 8 }}>
                     <button
                       type="button"
                       aria-expanded={expanded}
-                      onClick={() => setExpandedPointClasses((previous) => ({
+                      onClick={() => setExpandedOwnershipClasses((previous) => ({
                         ...previous,
                         [className]: !previous[className],
                       }))}
@@ -1735,36 +1744,32 @@ export default function Home() {
                         display: "flex",
                         justifyContent: "space-between",
                         alignItems: "center",
-                        padding: "12px 14px",
+                        padding: "13px 14px",
                         border: "1px solid rgba(17, 24, 39, 0.2)",
                         borderRadius: expanded ? "12px 12px 0 0" : 12,
                         background: CLASS_COLOR[className] || "#e5e7eb",
                         color: "#111827",
-                        fontSize: 14,
+                        fontSize: 15,
                         fontWeight: 900,
                         cursor: "pointer",
                         textAlign: "left",
                       }}
                     >
                       <span><span aria-hidden="true">{expanded ? "▼" : "▶"}</span>{" "}{className}</span>
-                      <span style={{ fontSize: 12, fontWeight: 700 }}>{series.length}シリーズ</span>
+                      <span style={{ fontSize: 12, fontWeight: 700 }}>{groups.length}シリーズ</span>
                     </button>
 
                     {expanded && (
-                      <div className="point-grid series-point-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: 8, border: "1px solid rgba(17, 24, 39, 0.2)", borderTop: 0, borderRadius: "0 0 12px 12px" }}>
-                        {series.map((seriesName) => renderSeriesPointRow(seriesName))}
+                      <div style={{ padding: "2px 8px 8px", border: "1px solid rgba(17, 24, 39, 0.2)", borderTop: 0, borderRadius: "0 0 12px 12px" }}>
+                        {groups.map((group) => renderOwnershipSeriesGroup(group))}
                       </div>
                     )}
                   </div>
                 );
               })}
-
             </div>
           )}
         </div>
-
-
-
 
 
         {/* 未使用Pt（艦種ごと） */}
@@ -1937,85 +1942,6 @@ export default function Home() {
             </div>
           )}
         </div>
-
-        {/* 所持 */}
-        <div className="section-card" style={{ marginBottom: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 6 }}>
-            <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 0 }}>所持モデル・モジュール入力（タップで◯を入力）</div>
-            {ownershipSaveStatus !== "idle" && (
-              <div
-                aria-live="polite"
-                style={{
-                  flexShrink: 0,
-                  padding: "5px 9px",
-                  borderRadius: 999,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: ownershipSaveStatus === "error" ? "#991b1b" : "#0d5b69",
-                  background: ownershipSaveStatus === "error" ? "#fee2e2" : "#dff3f6",
-                }}
-              >
-                {ownershipSaveStatus === "pending" && `保存待ち ${ownershipPendingCount}件`}
-                {ownershipSaveStatus === "saving" && (
-                  <><span className="save-spinner" aria-hidden="true" />保存中…</>
-                )}
-                {ownershipSaveStatus === "saved" && "保存済み"}
-                {ownershipSaveStatus === "error" && `未保存 ${ownershipPendingCount}件`}
-              </div>
-            )}
-          </div>
-
-          {!selectedUser ? (
-            <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
-          ) : (
-            <div ref={refOwnedBox} className="owned-list" style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, maxHeight: 420, overflow: "auto" }}>
-              {regularCatalog.map((item, index) =>
-                renderOwnedItem(item, `${item.name}__regular__${index}`)
-              )}
-
-              {ownershipClassGroups.map(({ className, groups }) => {
-                const expanded = Boolean(expandedOwnershipClasses[className]);
-                return (
-                  <div key={className} style={{ marginTop: 8 }}>
-                    <button
-                      type="button"
-                      aria-expanded={expanded}
-                      onClick={() => setExpandedOwnershipClasses((previous) => ({
-                        ...previous,
-                        [className]: !previous[className],
-                      }))}
-                      style={{
-                        width: "100%",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        padding: "13px 14px",
-                        border: "1px solid rgba(17, 24, 39, 0.2)",
-                        borderRadius: expanded ? "12px 12px 0 0" : 12,
-                        background: CLASS_COLOR[className] || "#e5e7eb",
-                        color: "#111827",
-                        fontSize: 15,
-                        fontWeight: 900,
-                        cursor: "pointer",
-                        textAlign: "left",
-                      }}
-                    >
-                      <span><span aria-hidden="true">{expanded ? "▼" : "▶"}</span>{" "}{className}</span>
-                      <span style={{ fontSize: 12, fontWeight: 700 }}>{groups.length}シリーズ</span>
-                    </button>
-
-                    {expanded && (
-                      <div style={{ padding: "2px 8px 8px", border: "1px solid rgba(17, 24, 39, 0.2)", borderTop: 0, borderRadius: "0 0 12px 12px" }}>
-                        {groups.map((group) => renderOwnershipSeriesGroup(group))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
         <div className="sync-note" style={{ marginTop: 12, fontSize: 12, color: "#6b7280" }}>
           ※ スプレッドシートからアプリ側への反映は 1時間に1回です（起動時は即時1回）。<br />
         </div>
@@ -2033,7 +1959,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.23
+        v1.24
 </div>
 
       <style jsx>{`
@@ -2057,11 +1983,6 @@ export default function Home() {
           .point-grid {
             grid-template-columns: minmax(0, 1fr) !important;
             max-height: 320px !important;
-          }
-
-          .series-point-grid {
-            max-height: none !important;
-            overflow: visible !important;
           }
 
           .point-row {
