@@ -1136,6 +1136,18 @@ export default function Home() {
     pointSaveStatus === "saved" ? "保存済み" :
     pointSaveStatus === "error" ? `未保存 ${pointPendingCount}件` : "";
 
+  const totalPendingCount = ownershipPendingCount + pointPendingCount;
+  const globalSaveStatus =
+    ownershipSaveStatus === "error" || pointSaveStatus === "error" ? "error" :
+    ownershipSaveStatus === "saving" || pointSaveStatus === "saving" ? "saving" :
+    ownershipSaveStatus === "pending" || pointSaveStatus === "pending" ? "pending" :
+    "saved";
+  const globalSaveText =
+    globalSaveStatus === "error" ? `未保存 ${totalPendingCount}件` :
+    globalSaveStatus === "saving" ? (totalPendingCount > 0 ? `保存中…・待ち ${totalPendingCount}件` : "保存中…") :
+    globalSaveStatus === "pending" ? `保存待ち ${totalPendingCount}件` :
+    "すべて保存済み";
+
   function renderOwnedItem(item: OwnedItem, itemKey: string) {
     if (!selectedUser) return null;
 
@@ -1361,10 +1373,38 @@ export default function Home() {
       style={{
         minHeight: "100vh",
         background: "#f3f4f6",
-        padding: 16,
+        padding: "64px 16px 16px",
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif'
       }}
     >
+      <div
+        aria-live="polite"
+        aria-label={`保存状態: ${globalSaveText}`}
+        style={{
+          position: "fixed",
+          top: "calc(env(safe-area-inset-top, 0px) + 8px)",
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 1000,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 7,
+          minHeight: 38,
+          padding: "8px 14px",
+          border: globalSaveStatus === "error" ? "1px solid #fca5a5" : globalSaveStatus === "pending" ? "1px solid #fcd34d" : globalSaveStatus === "saving" ? "1px solid #93c5fd" : "1px solid #86efac",
+          borderRadius: 999,
+          background: globalSaveStatus === "error" ? "#fee2e2" : globalSaveStatus === "pending" ? "#fef3c7" : globalSaveStatus === "saving" ? "#dbeafe" : "#dcfce7",
+          color: globalSaveStatus === "error" ? "#991b1b" : globalSaveStatus === "pending" ? "#92400e" : globalSaveStatus === "saving" ? "#1e40af" : "#166534",
+          boxShadow: "0 6px 18px rgba(15, 23, 42, 0.18)",
+          fontSize: 13,
+          fontWeight: 800,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {globalSaveStatus === "saving" && <span className="save-spinner" aria-hidden="true" />}
+        <span aria-hidden="true">{globalSaveStatus === "saved" ? "✓" : globalSaveStatus === "error" ? "!" : "●"}</span>
+        {globalSaveText}
+      </div>
       <div
         className="home-panel"
         style={{
@@ -2027,7 +2067,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.25
+        v1.26
 </div>
 
       <style jsx>{`
