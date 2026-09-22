@@ -1121,7 +1121,7 @@ export default function Home() {
       <div
         key={itemKey}
         className="owned-row"
-        style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "10px 8px", borderBottom: "1px solid #f3f4f6", background: bgColor }}
+        style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "10px 8px", marginBottom: 6, border: "1px solid rgba(17, 24, 39, 0.1)", borderRadius: 10, background: bgColor }}
       >
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 600 }}>{item.name}</div>
