@@ -1,7 +1,7 @@
 // lib/ships.ts
 
 /** ✅ フィルタ：全艦船 + 4分類 */
-export type ShipType = "全艦船" | "小型艦" | "大型艦" | "艦載機" | "モジュール";
+export type ShipType = "全艦船" | "小型艦" | "大型艦" | "艦載機";
 
 /** 文字の揺れをなるべく吸収 */
 export function normalize(s: string) {

@@ -9,7 +9,7 @@ import shipImageMap from "@/src/data/ship-image-map.json";
 type Ship = Record<string, string | number>;
 type Detail = Record<string, string | number>;
 type Enhancement = Record<string, string | number>;
-type ShipGroup = "全艦船" | "小型艦" | "大型艦" | "艦載機" | "モジュール";
+type ShipGroup = "全艦船" | "小型艦" | "大型艦" | "艦載機";
 
 type AppliedStats = {
   antiShipDpm: number;
@@ -97,7 +97,6 @@ function matchesGroup(shipType: string, group: ShipGroup) {
   if (group === "小型艦") return shipType === "フリゲート" || shipType === "駆逐艦";
   if (group === "大型艦") return ["巡洋艦", "巡洋戦艦", "航空母艦", "支援艦", "戦艦"].includes(shipType);
   if (group === "艦載機") return shipType === "戦闘機" || shipType === "護送艦";
-  if (group === "モジュール") return shipType.includes("モジュール");
   return true;
 }
 
@@ -297,7 +296,6 @@ export default function ShipZukanPage() {
               <option>小型艦</option>
               <option>大型艦</option>
               <option>艦載機</option>
-              <option>モジュール</option>
             </select>
           </div>
         </div>

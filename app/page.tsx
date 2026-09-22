@@ -442,7 +442,7 @@ export default function Home() {
     if (ui) {
       setSelectedUser(ui.selectedUser || "");
       setUserQuery(ui.userQuery || "");
-      setShipType(ui.shipType || "全艦船");
+      setShipType((ui.shipType as string) === "モジュール" ? "全艦船" : (ui.shipType || "全艦船"));
       setShipQuery(ui.shipQuery || "");
       setSeriesDraftByUser(ui.seriesDraftByUser || {});
       setUnusedDraftByUser(ui.unusedDraftByUser || {});
@@ -756,17 +756,8 @@ export default function Home() {
       list = list.filter((x) => {
         const cls = classifyByName(x.name);
 
-        if (shipType === "モジュール") {
-          return (
-            cls === "巡洋戦艦モジュール" ||
-            cls === "航空母艦モジュール" ||
-            cls === "支援艦モジュール" ||
-            cls === "戦艦モジュール"
-          );
-        }
-
         if (shipType === "小型艦") return cls === "フリゲート" || cls === "駆逐艦";
-        if (shipType === "艦載機") return cls === "戦闘機";
+        if (shipType === "艦載機") return cls === "戦闘機" || cls === "護送艦";
 
         return cls === "巡洋艦" || cls === "巡洋戦艦" || cls === "航空母艦" || cls === "支援艦" || cls === "戦艦";
       });
@@ -1717,7 +1708,6 @@ export default function Home() {
             <option>小型艦</option>
             <option>大型艦</option>
             <option>艦載機</option>
-            <option>モジュール</option>
           </select>
         </div>
 
@@ -2012,7 +2002,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.24
+        v1.25
 </div>
 
       <style jsx>{`
