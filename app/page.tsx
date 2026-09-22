@@ -219,6 +219,7 @@ export default function Home() {
   const [ownershipPendingCount, setOwnershipPendingCount] = useState(0);
   const [pointSaveStatus, setPointSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
   const [pointPendingCount, setPointPendingCount] = useState(0);
+  const [refreshStatus, setRefreshStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [expandedOwnershipClasses, setExpandedOwnershipClasses] = useState<Partial<Record<OwnershipClass, boolean>>>({});
   const [expandedModuleGroups, setExpandedModuleGroups] = useState<Partial<Record<string, boolean>>>({});
   const refSeriesBox = useRef<HTMLDivElement | null>(null);
@@ -383,6 +384,35 @@ export default function Home() {
       body: JSON.stringify({ action: "export" }),
     });
     return await res.json();
+  }
+
+  async function refreshFromSpreadsheet() {
+    if (refreshStatus === "loading") return;
+
+    const hasPendingChanges =
+      pendingOwnershipRef.current.size > 0 ||
+      pendingPointRef.current.size > 0 ||
+      ownershipSavingRef.current ||
+      pointSavingRef.current;
+
+    if (hasPendingChanges) {
+      alert("保存中の変更があります。保存済みになってから更新してください。");
+      return;
+    }
+
+    setRefreshStatus("loading");
+    try {
+      const data = await apiExport();
+      if (!data?.ok) throw new Error(data?.error || "最新データを取得できませんでした");
+
+      if (data.users) setUsers(data.users);
+      if (data.seriesPointsByUser) setSeriesPointsByUser(data.seriesPointsByUser);
+      if (data.unusedPointsByUser) setUnusedPointsByUser(data.unusedPointsByUser);
+      setRefreshStatus("success");
+    } catch (error) {
+      console.error("手動更新に失敗:", error);
+      setRefreshStatus("error");
+    }
   }
 
   // ---------- 起動時：localStorage（軽い復元） ----------
@@ -1393,6 +1423,29 @@ export default function Home() {
           >
             艦船図鑑ページへ
           </Link>
+
+          <button
+            type="button"
+            onClick={() => void refreshFromSpreadsheet()}
+            disabled={refreshStatus === "loading"}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+              padding: "10px 14px",
+              border: "1px solid #0f766e",
+              borderRadius: 10,
+              background: refreshStatus === "error" ? "#fee2e2" : refreshStatus === "success" ? "#dcfce7" : "#0f766e",
+              color: refreshStatus === "error" ? "#991b1b" : refreshStatus === "success" ? "#166534" : "white",
+              fontWeight: "bold",
+              cursor: refreshStatus === "loading" ? "wait" : "pointer",
+            }}
+            aria-label="スプレッドシートから最新データを取得"
+          >
+            {refreshStatus === "loading" && <span className="save-spinner refresh-spinner" aria-hidden="true" />}
+            {refreshStatus === "loading" ? "更新中…" : refreshStatus === "success" ? "更新済み" : refreshStatus === "error" ? "更新失敗・再試行" : "最新データに更新"}
+          </button>
         </div>
         </header>
         {/* 新規ユーザー作成 */}
