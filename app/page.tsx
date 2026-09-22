@@ -220,6 +220,7 @@ export default function Home() {
   const [pointSaveStatus, setPointSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
   const [pointPendingCount, setPointPendingCount] = useState(0);
   const [expandedOwnershipClasses, setExpandedOwnershipClasses] = useState<Partial<Record<OwnershipClass, boolean>>>({});
+  const [expandedPointClasses, setExpandedPointClasses] = useState<Partial<Record<OwnershipClass, boolean>>>({});
   const [expandedModuleGroups, setExpandedModuleGroups] = useState<Partial<Record<string, boolean>>>({});
   const refSeriesBox = useRef<HTMLDivElement | null>(null);
   const refUnusedBox = useRef<HTMLDivElement | null>(null);
@@ -783,6 +784,13 @@ export default function Home() {
     })).filter((entry) => entry.groups.length > 0);
   }, [ownershipGroups]);
 
+  const pointSeriesClassGroups = useMemo(() => {
+    return OWNERSHIP_CLASS_ORDER.map((className) => ({
+      className,
+      series: SERIES_NAMES.filter((series) => CLASS_BY_SERIES[series] === className),
+    })).filter((entry) => entry.series.length > 0);
+  }, []);
+
   const groupedSeries = useMemo(() => new Set(ownershipGroups.map((group) => group.series)), [ownershipGroups]);
 
   const regularCatalog = useMemo(
@@ -1235,6 +1243,113 @@ export default function Home() {
     );
   }
 
+  function renderSeriesPointRow(series: string) {
+    if (!selectedUser) return null;
+
+    const cls = CLASS_BY_SERIES[series];
+    const saved = seriesPointsByUser[selectedUser]?.[series];
+    const draft = seriesDraftByUser[selectedUser]?.[series];
+    const displayValue = draft !== undefined ? draft : (saved === undefined ? "" : String(saved));
+
+    return (
+      <div
+        key={series}
+        className="point-row"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 8,
+          border: "1px solid #f3f4f6",
+          borderRadius: 10,
+          padding: 8,
+          background: CLASS_COLOR[cls] || "#ffffff",
+        }}
+      >
+        <div className="point-name" style={{ fontSize: 13, fontWeight: 600 }}>{series}</div>
+        <div className="point-actions" style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          <button
+            type="button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => void addSeriesPoints(series, -5)}
+            style={{ padding: "8px 9px", border: "1px solid #dc2626", borderRadius: 10, background: "#dc2626", color: "white", fontWeight: 700, cursor: "pointer" }}
+            aria-label={`${series}のポイントを5減らす`}
+          >
+            -5
+          </button>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            step={1}
+            value={displayValue}
+            onChange={(event) => {
+              if (!selectedUser) return;
+              const raw = event.target.value;
+              setSeriesDraftByUser((previous) => ({
+                ...previous,
+                [selectedUser]: { ...(previous[selectedUser] || {}), [series]: raw },
+              }));
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") (event.target as HTMLInputElement).blur();
+            }}
+            onBlur={() => {
+              if (!selectedUser) return;
+              const userName = selectedUser;
+              const raw = seriesDraftByUser[userName]?.[series];
+              if (raw === undefined) return;
+
+              if (raw.trim() === "") {
+                const key = `${userName}::${series}`;
+                latestSeriesPointsRef.current[key] = 0;
+                setSeriesPointsByUser((previous) => ({
+                  ...previous,
+                  [userName]: { ...(previous[userName] || {}), [series]: undefined },
+                }));
+                setSeriesDraftByUser((previous) => {
+                  const next = { ...previous };
+                  const userDrafts = { ...(next[userName] || {}) };
+                  delete userDrafts[series];
+                  next[userName] = userDrafts;
+                  return next;
+                });
+                scheduleSeriesSave(userName, series, null);
+                return;
+              }
+
+              const value = clampInt(raw);
+              const key = `${userName}::${series}`;
+              latestSeriesPointsRef.current[key] = value;
+              setSeriesPointsByUser((previous) => ({
+                ...previous,
+                [userName]: { ...(previous[userName] || {}), [series]: value },
+              }));
+              setSeriesDraftByUser((previous) => {
+                const next = { ...previous };
+                const userDrafts = { ...(next[userName] || {}) };
+                delete userDrafts[series];
+                next[userName] = userDrafts;
+                return next;
+              });
+              scheduleSeriesSave(userName, series, value);
+            }}
+            style={{ width: 40, padding: 8, border: "1px solid #d1d5db", borderRadius: 10, textAlign: "right" }}
+          />
+          <button
+            type="button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => void addSeriesPoints(series, 5)}
+            style={{ padding: "8px 9px", border: "1px solid #2563eb", borderRadius: 10, background: "#2563eb", color: "white", fontWeight: 700, cursor: "pointer" }}
+            aria-label={`${series}のポイントを5増やす`}
+          >
+            +5
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <main
       className="home-shell"
@@ -1603,150 +1718,47 @@ export default function Home() {
           {!selectedUser ? (
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
           ) : (
-            <div ref={refSeriesBox} className="point-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxHeight: 220, overflow: "auto" }}>
-              {SERIES_NAMES.map((s) => {
-                const cls = CLASS_BY_SERIES[s];
-                const bgColor = CLASS_COLOR[cls] || "#ffffff";
-                const saved = seriesPointsByUser[selectedUser]?.[s]; // number | undefined
-                const draft = seriesDraftByUser[selectedUser]?.[s];  // string | undefined
-
-                const displayValue =
-                  draft !== undefined ? draft : (saved === undefined ? "" : String(saved));
-
+            <div ref={refSeriesBox} style={{ maxHeight: 320, overflow: "auto" }}>
+              {pointSeriesClassGroups.map(({ className, series }) => {
+                const expanded = Boolean(expandedPointClasses[className]);
                 return (
-                  
-                  <div
-                    key={s}
-                    className="point-row"
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: 8,
-                      border: "1px solid #f3f4f6",
-                      borderRadius: 10,
-                      padding: 8,
-                      background: bgColor,
-                    }}
-                  >
-                    <div className="point-name" style={{ fontSize: 13, fontWeight: 600 }}>{s}</div>
-
-                    <div className="point-actions" style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                  <div key={className} style={{ marginBottom: 8 }}>
                     <button
                       type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => void addSeriesPoints(s, -5)}
+                      aria-expanded={expanded}
+                      onClick={() => setExpandedPointClasses((previous) => ({
+                        ...previous,
+                        [className]: !previous[className],
+                      }))}
                       style={{
-                        padding: "8px 9px",
-                        border: "1px solid #dc2626",
-                        borderRadius: 10,
-                        background: "#dc2626",
-                        color: "white",
-                        fontWeight: 700,
+                        width: "100%",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "12px 14px",
+                        border: "1px solid rgba(17, 24, 39, 0.2)",
+                        borderRadius: expanded ? "12px 12px 0 0" : 12,
+                        background: CLASS_COLOR[className] || "#e5e7eb",
+                        color: "#111827",
+                        fontSize: 14,
+                        fontWeight: 900,
                         cursor: "pointer",
+                        textAlign: "left",
                       }}
-                      aria-label={`${s}のポイントを5減らす`}
                     >
-                      -5
+                      <span><span aria-hidden="true">{expanded ? "▼" : "▶"}</span>{" "}{className}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700 }}>{series.length}シリーズ</span>
                     </button>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      step={1}
-                      value={displayValue}
-                      onChange={(e) => {
-                        if (!selectedUser) return;
-                        const raw = e.target.value; // 空欄もそのまま保持
-                        setSeriesDraftByUser((prev) => ({
-                          ...prev,
-                          [selectedUser]: { ...(prev[selectedUser] || {}), [s]: raw },
-                        }));
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") (e.target as HTMLInputElement).blur(); // Enterで確定
-                      }}
-                      onBlur={() => {
-                        if (!selectedUser) return;
-                        const userName = selectedUser;
 
-                        const raw = seriesDraftByUser[userName]?.[s];
-                        if (raw === undefined) return; // 触ってない
-
-                        // 空欄 → クリア（GASもクリア）
-                        if (raw.trim() === "") {
-                          const key = `${userName}::${s}`;
-                          latestSeriesPointsRef.current[key] = 0;
-                          setSeriesPointsByUser((prev) => ({
-                            ...prev,
-                            [userName]: { ...(prev[userName] || {}), [s]: undefined },
-                          }));
-
-                          // draft消す
-                          setSeriesDraftByUser((prev) => {
-                            const next = { ...prev };
-                            const u = { ...(next[userName] || {}) };
-                            delete u[s];
-                            next[userName] = u;
-                            return next;
-                          });
-
-                          scheduleSeriesSave(userName, s, null);
-
-                          return;
-                        }
-
-                        const val = clampInt(raw);
-                        const key = `${userName}::${s}`;
-                        latestSeriesPointsRef.current[key] = val;
-
-                        setSeriesPointsByUser((prev) => ({
-                          ...prev,
-                          [userName]: { ...(prev[userName] || {}), [s]: val },
-                        }));
-
-                        // draft消す
-                        setSeriesDraftByUser((prev) => {
-                          const next = { ...prev };
-                          const u = { ...(next[userName] || {}) };
-                          delete u[s];
-                          next[userName] = u;
-                          return next;
-                        });
-
-                        scheduleSeriesSave(userName, s, val);
-
-                      }}
-                      style={{
-                        width: 40,
-                        padding: 8,
-                        border: "1px solid #d1d5db",
-                        borderRadius: 10,
-                        textAlign: "right",
-                        
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => void addSeriesPoints(s, 5)}
-                      style={{
-                        padding: "8px 9px",
-                        border: "1px solid #2563eb",
-                        borderRadius: 10,
-                        background: "#2563eb",
-                        color: "white",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                      }}
-                      aria-label={`${s}のポイントを5増やす`}
-                    >
-                      +5
-                    </button>
-                    </div>
+                    {expanded && (
+                      <div className="point-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: 8, border: "1px solid rgba(17, 24, 39, 0.2)", borderTop: 0, borderRadius: "0 0 12px 12px" }}>
+                        {series.map((seriesName) => renderSeriesPointRow(seriesName))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
+
             </div>
           )}
         </div>
@@ -2021,7 +2033,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.220
+        v1.23
 </div>
 
       <style jsx>{`
