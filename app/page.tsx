@@ -52,6 +52,41 @@ const CLASS_COLOR: Record<string, string> = {
   戦艦モジュール: "#8e7cc3",
 };
 
+const FOLDABLE_MODULE_CLASSES = new Set([
+  "巡洋戦艦モジュール",
+  "航空母艦モジュール",
+  "支援艦モジュール",
+  "戦艦モジュール",
+]);
+
+const FOLDABLE_MODEL_CLASSES = new Set([
+  "フリゲート",
+  "駆逐艦",
+  "巡洋艦",
+  "戦闘機",
+  "護送艦",
+]);
+
+const FOLDABLE_CAPITAL_CLASSES = new Set([
+  "巡洋戦艦",
+  "航空母艦",
+  "支援艦",
+  "戦艦",
+]);
+
+const OWNERSHIP_CLASS_ORDER = [
+  "フリゲート",
+  "駆逐艦",
+  "巡洋艦",
+  "戦闘機",
+  "護送艦",
+  "巡洋戦艦",
+  "航空母艦",
+  "支援艦",
+  "戦艦",
+] as const;
+type OwnershipClass = (typeof OWNERSHIP_CLASS_ORDER)[number];
+
 // ✅ 未使用Ptも「未入力」を許可する（空欄表示したいので）
 type UnusedPointsMap = Partial<Record<UnusedClass, number>>;
 type UnusedPointsByUserMap = Record<string, UnusedPointsMap>;
@@ -184,6 +219,8 @@ export default function Home() {
   const [ownershipPendingCount, setOwnershipPendingCount] = useState(0);
   const [pointSaveStatus, setPointSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
   const [pointPendingCount, setPointPendingCount] = useState(0);
+  const [expandedOwnershipClasses, setExpandedOwnershipClasses] = useState<Partial<Record<OwnershipClass, boolean>>>({});
+  const [expandedModuleGroups, setExpandedModuleGroups] = useState<Partial<Record<string, boolean>>>({});
   const refSeriesBox = useRef<HTMLDivElement | null>(null);
   const refUnusedBox = useRef<HTMLDivElement | null>(null);
   const refOwnedBox = useRef<HTMLDivElement | null>(null);
@@ -664,8 +701,8 @@ export default function Home() {
     return totals;
   }, [selectedUser, ownedList, effectiveSeriesPoints, effectiveUnusedPoints]);
 
-  // ✅ 図鑑（MASTER_ORDER順＋検索＋フィルタ）
-  const filteredCatalog: OwnedItem[] = useMemo(() => {
+  // ✅ 図鑑（MASTER_ORDER順）
+  const catalog: OwnedItem[] = useMemo(() => {
     const map = new Map<string, OwnedItem>();
     for (const u of Object.keys(users || {})) {
       for (const it of users[u] || []) {
@@ -674,11 +711,16 @@ export default function Home() {
       }
     }
 
-    let list: OwnedItem[] = MASTER_ORDER.map((name) => {
+    return MASTER_ORDER.map((name) => {
       const key = normalize(name);
       const found = map.get(key);
       return found ? found : { name: key, type: "（データ未登録）" };
     });
+  }, [users]);
+
+  // ✅ 検索＋フィルタ
+  const filteredCatalog: OwnedItem[] = useMemo(() => {
+    let list = catalog;
 
     if (shipType !== "全艦船") {
       list = list.filter((x) => {
@@ -704,7 +746,51 @@ export default function Home() {
     if (q) list = list.filter((x) => x.name.includes(q));
 
     return list;
-  }, [users, shipType, shipQuery]);
+  }, [catalog, shipType, shipQuery]);
+
+  const ownershipGroups = useMemo(() => {
+    const groups = new Map<string, { series: string; mainItems: OwnedItem[]; modules: OwnedItem[]; order: number }>();
+
+    catalog.forEach((item, index) => {
+      const cls = classifyByName(item.name);
+      const isModel = FOLDABLE_MODEL_CLASSES.has(cls) || FOLDABLE_CAPITAL_CLASSES.has(cls);
+      const isModule = FOLDABLE_MODULE_CLASSES.has(cls);
+      if (!isModel && !isModule) return;
+      const series = guessSeries(item.name);
+      if (!series) return;
+
+      const group = groups.get(series) || { series, mainItems: [], modules: [], order: index };
+      if (isModule) group.modules.push(item);
+      else group.mainItems.push(item);
+      group.order = Math.min(group.order, index);
+      groups.set(series, group);
+    });
+
+    const visibleNames = new Set(filteredCatalog.map((item) => normalize(item.name)));
+    return Array.from(groups.values())
+      .filter((group) => [...group.mainItems, ...group.modules].some((item) => visibleNames.has(normalize(item.name))))
+      .map((group) => ({
+        ...group,
+        className: (CLASS_BY_SERIES[group.series] || classifyByName(group.mainItems[0]?.name || "")) as OwnershipClass,
+      }))
+      .sort((a, b) => a.order - b.order);
+  }, [catalog, filteredCatalog]);
+
+  const ownershipClassGroups = useMemo(() => {
+    return OWNERSHIP_CLASS_ORDER.map((className) => ({
+      className,
+      groups: ownershipGroups.filter((group) => group.className === className),
+    })).filter((entry) => entry.groups.length > 0);
+  }, [ownershipGroups]);
+
+  const groupedSeries = useMemo(() => new Set(ownershipGroups.map((group) => group.series)), [ownershipGroups]);
+
+  const regularCatalog = useMemo(
+    () => filteredCatalog.filter((item) => {
+      return !groupedSeries.has(guessSeries(item.name));
+    }),
+    [filteredCatalog, groupedSeries]
+  );
 
   // ---------- ユーザー作成（ローカルも） ----------
   function ensureUser(name: string): { user: string; created: boolean } {
@@ -1021,6 +1107,133 @@ export default function Home() {
     pointSaveStatus === "saving" ? "保存中…" :
     pointSaveStatus === "saved" ? "保存済み" :
     pointSaveStatus === "error" ? `未保存 ${pointPendingCount}件` : "";
+
+  function renderOwnedItem(item: OwnedItem, itemKey: string) {
+    if (!selectedUser) return null;
+
+    const owned = isOwned(selectedUser, item.name);
+    const cls = classifyByName(item.name);
+    const bgColor = CLASS_COLOR[cls] || "#ffffff";
+    const series = guessSeries(item.name);
+    const pt = series ? (effectiveSeriesPoints[series] ?? 0) : 0;
+
+    return (
+      <div
+        key={itemKey}
+        className="owned-row"
+        style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "10px 8px", borderBottom: "1px solid #f3f4f6", background: bgColor }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>{item.name}</div>
+          <div style={{ fontSize: 12, color: "#000000" }}>
+            {cls} / {series ? `シリーズ:${series} / Pt:${pt}` : "シリーズ未判定 / Pt:0"}
+          </div>
+        </div>
+
+        <button
+          className="owned-toggle"
+          onClick={() => toggleOwned(selectedUser, item)}
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            border: owned ? "2px solid #16a34a" : "1px solid #d1d5db",
+            background: owned ? "#dcfce7" : "white",
+            fontSize: 18,
+            fontWeight: "bold",
+            cursor: "pointer",
+          }}
+          title="所持を切り替え"
+        >
+          {owned ? "◯" : ""}
+        </button>
+      </div>
+    );
+  }
+
+  function renderOwnershipSeriesGroup(group: (typeof ownershipGroups)[number]) {
+    if (!selectedUser) return null;
+
+    const expanded = Boolean(expandedModuleGroups[group.series]);
+    const parentItem = group.mainItems[0];
+    const parentClass = parentItem ? classifyByName(parentItem.name) : "未分類";
+    const isCapitalGroup = FOLDABLE_CAPITAL_CLASSES.has(parentClass);
+    const parentOwned = parentItem ? isOwned(selectedUser, parentItem.name) : false;
+    const childItems = isCapitalGroup ? group.modules : group.mainItems;
+    const groupLabel = isCapitalGroup && parentItem ? parentItem.name : group.series;
+
+    return (
+      <div key={group.series} style={{ marginTop: 6 }}>
+        <div
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+            padding: 8,
+            border: "1px solid rgba(17, 24, 39, 0.14)",
+            borderRadius: expanded ? "12px 12px 0 0" : 12,
+            background: CLASS_COLOR[parentClass] || CLASS_COLOR[classifyByName(childItems[0]?.name || "")] || "#f3f4f6",
+            color: "#111827",
+          }}
+        >
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => setExpandedModuleGroups((previous) => ({
+              ...previous,
+              [group.series]: !previous[group.series],
+            }))}
+            style={{
+              minWidth: 0,
+              flex: 1,
+              padding: "8px 6px",
+              border: 0,
+              background: "transparent",
+              color: "inherit",
+              fontSize: 14,
+              fontWeight: 800,
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+          >
+            <span aria-hidden="true">{expanded ? "▼" : "▶"}</span>{" "}
+            {groupLabel}
+          </button>
+
+          {isCapitalGroup && parentItem && (
+            <button
+              className="owned-toggle"
+              onClick={() => toggleOwned(selectedUser, parentItem)}
+              style={{
+                width: 44,
+                height: 44,
+                flexShrink: 0,
+                borderRadius: 12,
+                border: parentOwned ? "2px solid #16a34a" : "1px solid #d1d5db",
+                background: parentOwned ? "#dcfce7" : "white",
+                fontSize: 18,
+                fontWeight: "bold",
+                cursor: "pointer",
+              }}
+              title={`${parentItem.name}の所持を切り替え`}
+            >
+              {parentOwned ? "◯" : ""}
+            </button>
+          )}
+        </div>
+
+        {expanded && (
+          <div style={{ border: "1px solid rgba(17, 24, 39, 0.14)", borderTop: 0, borderRadius: "0 0 12px 12px", overflow: "hidden" }}>
+            {childItems.map((item, index) =>
+              renderOwnedItem(item, `${item.name}__${group.series}__${index}`)
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <main
@@ -1744,43 +1957,46 @@ export default function Home() {
             <div style={{ fontSize: 14, color: "#6b7280" }}>まずユーザーを選択してください</div>
           ) : (
             <div ref={refOwnedBox} className="owned-list" style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 8, maxHeight: 420, overflow: "auto" }}>
-              {filteredCatalog.map((it, idx) => {
-                const owned = isOwned(selectedUser, it.name);
-                const cls = classifyByName(it.name);
-                const bgColor = CLASS_COLOR[cls] || "#ffffff";
-                const series = guessSeries(it.name);
-                const pt = series ? (effectiveSeriesPoints[series] ?? 0) : 0;
+              {regularCatalog.map((item, index) =>
+                renderOwnedItem(item, `${item.name}__regular__${index}`)
+              )}
 
+              {ownershipClassGroups.map(({ className, groups }) => {
+                const expanded = Boolean(expandedOwnershipClasses[className]);
                 return (
-                  <div
-                    key={`${it.name}__${idx}`}
-                    className="owned-row"
-                    style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "10px 8px", borderBottom: "1px solid #f3f4f6", background: bgColor }}
-                  >
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600 }}>{it.name}</div>
-                      <div style={{ fontSize: 12, color: "#000000" }}>
-                        {cls} / {series ? `シリーズ:${series} / Pt:${pt}` : "シリーズ未判定 / Pt:0"}
-                      </div>
-                    </div>
-
+                  <div key={className} style={{ marginTop: 8 }}>
                     <button
-                      className="owned-toggle"
-                      onClick={() => toggleOwned(selectedUser, it)}
+                      type="button"
+                      aria-expanded={expanded}
+                      onClick={() => setExpandedOwnershipClasses((previous) => ({
+                        ...previous,
+                        [className]: !previous[className],
+                      }))}
                       style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 12,
-                        border: owned ? "2px solid #16a34a" : "1px solid #d1d5db",
-                        background: owned ? "#dcfce7" : "white",
-                        fontSize: 18,
-                        fontWeight: "bold",
+                        width: "100%",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "13px 14px",
+                        border: "1px solid rgba(17, 24, 39, 0.2)",
+                        borderRadius: expanded ? "12px 12px 0 0" : 12,
+                        background: CLASS_COLOR[className] || "#e5e7eb",
+                        color: "#111827",
+                        fontSize: 15,
+                        fontWeight: 900,
                         cursor: "pointer",
+                        textAlign: "left",
                       }}
-                      title="所持を切り替え"
                     >
-                      {owned ? "◯" : ""}
+                      <span><span aria-hidden="true">{expanded ? "▼" : "▶"}</span>{" "}{className}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700 }}>{groups.length}シリーズ</span>
                     </button>
+
+                    {expanded && (
+                      <div style={{ padding: "2px 8px 8px", border: "1px solid rgba(17, 24, 39, 0.2)", borderTop: 0, borderRadius: "0 0 12px 12px" }}>
+                        {groups.map((group) => renderOwnershipSeriesGroup(group))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
