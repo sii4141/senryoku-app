@@ -1751,7 +1751,7 @@ export default function Home() {
                     </button>
 
                     {expanded && (
-                      <div className="point-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: 8, border: "1px solid rgba(17, 24, 39, 0.2)", borderTop: 0, borderRadius: "0 0 12px 12px" }}>
+                      <div className="point-grid series-point-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: 8, border: "1px solid rgba(17, 24, 39, 0.2)", borderTop: 0, borderRadius: "0 0 12px 12px" }}>
                         {series.map((seriesName) => renderSeriesPointRow(seriesName))}
                       </div>
                     )}
@@ -2057,6 +2057,11 @@ export default function Home() {
           .point-grid {
             grid-template-columns: minmax(0, 1fr) !important;
             max-height: 320px !important;
+          }
+
+          .series-point-grid {
+            max-height: none !important;
+            overflow: visible !important;
           }
 
           .point-row {
