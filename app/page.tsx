@@ -1238,6 +1238,7 @@ export default function Home() {
     return (
       <div key={group.series} style={{ marginTop: 6 }}>
         <div
+          className={`ownership-series-header${isCapitalGroup ? " is-capital" : ""}`}
           style={{
             width: "100%",
             display: "flex",
@@ -1252,6 +1253,7 @@ export default function Home() {
           }}
         >
           <button
+            className="ownership-series-label"
             type="button"
             aria-expanded={expanded}
             onClick={() => setExpandedModuleGroups((previous) => ({
@@ -1891,6 +1893,7 @@ export default function Home() {
                 return (
                   <div key={className} style={{ marginTop: 8 }}>
                     <button
+                      className="ownership-class-header"
                       type="button"
                       aria-expanded={expanded}
                       onClick={() => setExpandedOwnershipClasses((previous) => ({
@@ -2117,7 +2120,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.28
+        v1.281
 </div>
 
       <style jsx>{`
