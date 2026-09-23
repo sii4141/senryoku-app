@@ -1226,14 +1226,26 @@ export default function Home() {
     const parentOwned = parentItem ? isOwned(selectedUser, parentItem.name) : false;
     const childItems = isCapitalGroup ? group.modules : group.mainItems;
     const groupLabel = isCapitalGroup && parentItem ? parentItem.name : group.series;
-    const ownedChildMarkers = childItems
+    const childMarkers = childItems
       .map((item, index) => ({
         item,
         marker: isCapitalGroup
           ? moduleOwnershipMarker(item)
           : modelOwnershipMarker(item, index),
+        owned: isOwned(selectedUser, item.name),
       }))
-      .filter(({ item, marker }) => marker && isOwned(selectedUser, item.name));
+      .filter(({ marker }) => marker);
+    const capitalMarkerRows = isCapitalGroup
+      ? Array.from(
+          childMarkers.reduce((rows, entry) => {
+            const prefix = entry.marker.match(/^[A-Z]+/i)?.[0]?.toUpperCase() || entry.marker;
+            const row = rows.get(prefix) || [];
+            row.push(entry);
+            rows.set(prefix, row);
+            return rows;
+          }, new Map<string, typeof childMarkers>())
+        )
+      : [];
 
     return (
       <div key={group.series} style={{ marginTop: 6 }}>
@@ -1277,17 +1289,38 @@ export default function Home() {
             {groupLabel}
           </button>
 
-          {ownedChildMarkers.length > 0 && (
+          {childMarkers.length > 0 && (
             <div
               className="owned-model-markers"
-              aria-label={`所有モデル: ${ownedChildMarkers.map(({ marker }) => marker).join("、")}`}
-              title={ownedChildMarkers
-                .map(({ item, marker }) => `${marker}: ${displayOwnedItemName(item.name)}`)
+              aria-label={childMarkers
+                .map(({ marker, owned }) => `${marker}:${owned ? "所有" : "未所有"}`)
+                .join("、")}
+              title={childMarkers
+                .map(({ item, marker, owned }) => `${marker}: ${displayOwnedItemName(item.name)}（${owned ? "所有" : "未所有"}）`)
                 .join("\n")}
             >
-              {ownedChildMarkers.map(({ item, marker }) => (
-                <span key={item.name}>{marker}</span>
-              ))}
+              {isCapitalGroup
+                ? capitalMarkerRows.map(([prefix, entries]) => (
+                    <div className="owned-module-marker-row" key={prefix}>
+                      {entries.map(({ item, marker, owned }) => (
+                        <span
+                          className={`owned-model-marker ${owned ? "is-owned" : "is-unowned"}`}
+                          key={item.name}
+                          style={{ gridColumn: Number(marker.match(/\d+$/)?.[0] || 1) }}
+                        >
+                          {marker}
+                        </span>
+                      ))}
+                    </div>
+                  ))
+                : childMarkers.map(({ item, marker, owned }) => (
+                    <span
+                      className={`owned-model-marker ${owned ? "is-owned" : "is-unowned"}`}
+                      key={item.name}
+                    >
+                      {marker}
+                    </span>
+                  ))}
             </div>
           )}
 
@@ -2120,7 +2153,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.281
+        v1.29
 </div>
 
       <style jsx>{`

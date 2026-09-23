@@ -411,26 +411,44 @@ a:active {
   min-width: 20px;
 }
 
-.owned-model-markers span {
+.owned-model-marker {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 18px;
   height: 14px;
   flex: 0 0 auto;
-  border: 1px solid #15803d;
   border-radius: 5px;
-  color: #166534;
-  background: #dcfce7;
   font-size: 10px;
   line-height: 1;
   font-weight: 800;
 }
 
+.owned-model-marker.is-owned {
+  border: 1px solid #16a34a;
+  color: #14532d;
+  background: #dcfce7;
+  box-shadow: 0 0 7px rgba(34, 197, 94, 0.9), 0 0 2px rgba(255, 255, 255, 0.95) inset;
+}
+
+.owned-model-marker.is-unowned {
+  border: 1px solid rgba(31, 41, 55, 0.38);
+  color: rgba(17, 24, 39, 0.52);
+  background: rgba(31, 41, 55, 0.14);
+  box-shadow: none;
+}
+
 .ownership-series-header.is-capital .owned-model-markers {
   flex-direction: column;
   flex-wrap: nowrap;
+  align-items: flex-start;
   max-width: none;
+}
+
+.owned-module-marker-row {
+  display: grid;
+  grid-auto-columns: 18px;
+  gap: 2px;
 }
 
 .sync-note {
@@ -470,6 +488,16 @@ a:active {
 
   .section-card {
     padding: 13px !important;
+  }
+
+  .ownership-series-header.is-capital {
+    flex-wrap: wrap;
+    justify-content: flex-end !important;
+  }
+
+  .ownership-series-header.is-capital .ownership-series-label {
+    flex: 1 0 100% !important;
+    padding-bottom: 4px !important;
   }
 
   .user-grid {
