@@ -18,6 +18,10 @@ import {
 type OwnedItem = { name: string; type: string };
 type UsersMap = Record<string, OwnedItem[]>;
 
+const HERO_SHIP_NAMES = new Set([
+  "AC720-エイグラム未名者",
+]);
+
 // ✅ Ptは「未入力」を許可する
 type SeriesPointsMap = Partial<Record<string, number>>;
 type SeriesPointsByUserMap = Record<string, SeriesPointsMap>;
@@ -1148,6 +1152,27 @@ export default function Home() {
     globalSaveStatus === "pending" ? `保存待ち ${totalPendingCount}件` :
     "すべて保存済み";
 
+  function ownershipMarker(index: number) {
+    let value = index + 1;
+    let label = "";
+
+    while (value > 0) {
+      value -= 1;
+      label = String.fromCharCode(65 + (value % 26)) + label;
+      value = Math.floor(value / 26);
+    }
+
+    return label;
+  }
+
+  function modelOwnershipMarker(item: OwnedItem, index: number) {
+    return HERO_SHIP_NAMES.has(normalize(item.name)) ? "H" : ownershipMarker(index);
+  }
+
+  function moduleOwnershipMarker(item: OwnedItem) {
+    return normalize(item.name).match(/^([A-Z]+\d+)-/i)?.[1]?.toUpperCase() || "";
+  }
+
   function renderOwnedItem(item: OwnedItem, itemKey: string) {
     if (!selectedUser) return null;
 
@@ -1201,6 +1226,14 @@ export default function Home() {
     const parentOwned = parentItem ? isOwned(selectedUser, parentItem.name) : false;
     const childItems = isCapitalGroup ? group.modules : group.mainItems;
     const groupLabel = isCapitalGroup && parentItem ? parentItem.name : group.series;
+    const ownedChildMarkers = childItems
+      .map((item, index) => ({
+        item,
+        marker: isCapitalGroup
+          ? moduleOwnershipMarker(item)
+          : modelOwnershipMarker(item, index),
+      }))
+      .filter(({ item, marker }) => marker && isOwned(selectedUser, item.name));
 
     return (
       <div key={group.series} style={{ marginTop: 6 }}>
@@ -1242,6 +1275,20 @@ export default function Home() {
             {groupLabel}
           </button>
 
+          {ownedChildMarkers.length > 0 && (
+            <div
+              className="owned-model-markers"
+              aria-label={`所有モデル: ${ownedChildMarkers.map(({ marker }) => marker).join("、")}`}
+              title={ownedChildMarkers
+                .map(({ item, marker }) => `${marker}: ${displayOwnedItemName(item.name)}`)
+                .join("\n")}
+            >
+              {ownedChildMarkers.map(({ item, marker }) => (
+                <span key={item.name}>{marker}</span>
+              ))}
+            </div>
+          )}
+
           {renderSeriesPointRow(group.series)}
 
           {isCapitalGroup && parentItem && (
@@ -1269,7 +1316,10 @@ export default function Home() {
         {expanded && (
           <div style={{ marginTop: 6, padding: "6px 6px 0", border: "1px solid rgba(17, 24, 39, 0.14)", borderRadius: 12, background: "rgba(255, 255, 255, 0.5)", overflow: "hidden" }}>
             {childItems.map((item, index) =>
-              renderOwnedItem(item, `${item.name}__${group.series}__${index}`)
+              renderOwnedItem(
+                item,
+                `${item.name}__${group.series}__${index}`
+              )
             )}
           </div>
         )}
@@ -2067,7 +2117,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.27
+        v1.28
 </div>
 
       <style jsx>{`
