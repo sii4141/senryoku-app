@@ -20,6 +20,7 @@ type UsersMap = Record<string, OwnedItem[]>;
 
 const HERO_SHIP_NAMES = new Set([
   "AC720-エイグラム未名者",
+  "星空巡遊者-レンジャー級民用観光船",
 ]);
 
 // ✅ Ptは「未入力」を許可する
@@ -2153,7 +2154,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.291
+        v1.292
 </div>
 
       <style jsx>{`
