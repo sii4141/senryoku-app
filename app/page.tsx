@@ -1227,6 +1227,9 @@ export default function Home() {
     const parentOwned = parentItem ? isOwned(selectedUser, parentItem.name) : false;
     const childItems = isCapitalGroup ? group.modules : group.mainItems;
     const groupLabel = isCapitalGroup && parentItem ? parentItem.name : group.series;
+    const allSeriesItems = [...group.mainItems, ...group.modules];
+    const ownsAllSeriesItems = allSeriesItems.length > 0 &&
+      allSeriesItems.every((item) => isOwned(selectedUser, item.name));
     const childMarkers = childItems
       .map((item, index) => ({
         item,
@@ -1326,6 +1329,21 @@ export default function Home() {
           )}
 
           {renderSeriesPointRow(group.series)}
+
+          <button
+            type="button"
+            className={`own-all-toggle${ownsAllSeriesItems ? " is-complete" : ""}`}
+            onClick={() => {
+              allSeriesItems.forEach((item) => {
+                if (!isOwned(selectedUser, item.name)) toggleOwned(selectedUser, item);
+              });
+            }}
+            disabled={ownsAllSeriesItems}
+            aria-label={`${groupLabel}のすべてのモデルを所有にする`}
+            title={ownsAllSeriesItems ? "すべて所有済み" : "シリーズ内をすべて所有にする"}
+          >
+            全所持
+          </button>
 
           {isCapitalGroup && parentItem && (
             <button
@@ -2154,7 +2172,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.292
+        v1.293
 </div>
 
       <style jsx>{`

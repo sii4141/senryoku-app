@@ -401,6 +401,35 @@ a:active {
   transform: scale(1.04);
 }
 
+.own-all-toggle {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  padding: 0;
+  border: 1px solid #0f766e;
+  border-radius: 10px;
+  color: #0f766e;
+  background: #f0fdfa;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(7, 17, 31, 0.1);
+}
+
+.own-all-toggle:hover:not(:disabled) {
+  transform: scale(1.04);
+  background: #ccfbf1;
+}
+
+.own-all-toggle.is-complete {
+  border-color: #16a34a;
+  color: #14532d;
+  background: #dcfce7;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.65);
+  cursor: default;
+  opacity: 1;
+}
+
 .owned-model-markers {
   display: flex;
   flex: 0 0 auto;
