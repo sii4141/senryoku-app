@@ -17,6 +17,11 @@ import {
 
 type OwnedItem = { name: string; type: string };
 type UsersMap = Record<string, OwnedItem[]>;
+type UserHistoryEntry = {
+  timestamp: string;
+  operation: string;
+  detail: string;
+};
 
 const HERO_SHIP_NAMES = new Set([
   "AC720-エイグラム未名者",
@@ -232,6 +237,8 @@ export default function Home() {
   const [pointSaveStatus, setPointSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
   const [pointPendingCount, setPointPendingCount] = useState(0);
   const [refreshStatus, setRefreshStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [userHistory, setUserHistory] = useState<UserHistoryEntry[]>([]);
+  const [historyStatus, setHistoryStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [expandedOwnershipClasses, setExpandedOwnershipClasses] = useState<Partial<Record<OwnershipClass, boolean>>>({});
   const [expandedModuleGroups, setExpandedModuleGroups] = useState<Partial<Record<string, boolean>>>({});
   const refSeriesBox = useRef<HTMLDivElement | null>(null);
@@ -243,6 +250,7 @@ export default function Home() {
   const pendingPointRef = useRef<Map<string, PendingPointChange>>(new Map());
   const pointSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pointSavingRef = useRef(false);
+  const historyRequestRef = useRef(0);
 
   // +5/-5を連打したときも、Reactの再描画を待たずに最新値を参照するためのref
   const latestSeriesPointsRef = useRef<Record<string, number>>({});
@@ -284,9 +292,38 @@ export default function Home() {
       });
 
       console.log("操作ログ保存結果:", result);
+      if (userName === selectedUser) void loadUserHistory(userName);
       return result;
     } catch (e) {
       console.error("操作ログ保存失敗:", e);
+    }
+  }
+
+  async function loadUserHistory(userName: string) {
+    const requestId = historyRequestRef.current + 1;
+    historyRequestRef.current = requestId;
+
+    if (!userName) {
+      setUserHistory([]);
+      setHistoryStatus("idle");
+      return;
+    }
+
+    setHistoryStatus("loading");
+    try {
+      const result = await gasPost({
+        action: "getUserHistory",
+        userName,
+        limit: 50,
+      });
+      if (requestId !== historyRequestRef.current) return;
+      setUserHistory(Array.isArray(result.history) ? result.history : []);
+      setHistoryStatus("success");
+    } catch (error) {
+      if (requestId !== historyRequestRef.current) return;
+      console.error("変更履歴の取得に失敗:", error);
+      setUserHistory([]);
+      setHistoryStatus("error");
     }
   }
 
@@ -468,6 +505,9 @@ export default function Home() {
     } else {
       localStorage.removeItem(STORAGE_KEY_SELECTED_USER);
     }
+  }, [selectedUser]);
+  useEffect(() => {
+    void loadUserHistory(selectedUser);
   }, [selectedUser]);
   useEffect(() => {
     saveUiState({
@@ -2155,6 +2195,48 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        {/* 選択ユーザーの変更履歴 */}
+        <div className="section-card history-card" style={{ marginBottom: 10 }}>
+          <div className="history-header">
+            <div className="section-title" style={{ fontSize: 14, fontWeight: "bold", marginBottom: 0 }}>
+              変更履歴
+            </div>
+            {selectedUser && (
+              <button
+                type="button"
+                className="history-refresh-button"
+                onClick={() => void loadUserHistory(selectedUser)}
+                disabled={historyStatus === "loading"}
+              >
+                {historyStatus === "loading" ? "読込中…" : "履歴を更新"}
+              </button>
+            )}
+          </div>
+
+          {!selectedUser ? (
+            <div className="history-message">まずユーザーを選択してください</div>
+          ) : historyStatus === "error" ? (
+            <div className="history-message is-error">変更履歴を取得できませんでした</div>
+          ) : historyStatus === "loading" && userHistory.length === 0 ? (
+            <div className="history-message"><span className="save-spinner" aria-hidden="true" />読み込んでいます</div>
+          ) : userHistory.length === 0 ? (
+            <div className="history-message">変更履歴はありません</div>
+          ) : (
+            <div className="history-list">
+              {userHistory.map((entry, index) => (
+                <article className="history-item" key={`${entry.timestamp}__${entry.operation}__${index}`}>
+                  <div className="history-item-heading">
+                    <span>{entry.operation || "操作"}</span>
+                    <time>{entry.timestamp}</time>
+                  </div>
+                  <div className="history-detail">{entry.detail || "詳細なし"}</div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="sync-note" style={{ marginTop: 12, fontSize: 12, color: "#6b7280" }}>
           ※ スプレッドシートからアプリ側への反映は 1時間に1回です（起動時は即時1回）。<br />
         </div>
@@ -2172,7 +2254,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.293
+        v1.294
 </div>
 
       <style jsx>{`

@@ -41,6 +41,13 @@ function doPost(e) {
       return jsonOut_(logAction_(body));
     }
 
+    if (action === "getUserHistory") {
+      return jsonOut_(getUserHistory_(
+        String(body.userName || "").trim(),
+        body.limit
+      ));
+    }
+
     if (action === "createUser") {
       return jsonOut_(createUser_(String(body.userName || "").trim()));
     }
@@ -663,6 +670,36 @@ function logAction_(body) {
   ]);
 
   return { ok: true };
+}
+
+function getUserHistory_(userName, requestedLimit) {
+  if (!userName) return { ok: false, error: "empty userName" };
+
+  const limit = Math.max(1, Math.min(100, Number(requestedLimit) || 50));
+  const logSs = SpreadsheetApp.openById(LOG_SPREADSHEET_ID);
+  const sheet = logSs.getSheetByName(LOG_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 2) return { ok: true, history: [] };
+
+  const lastRow = sheet.getLastRow();
+  const values = sheet.getRange(2, 1, lastRow - 1, 4).getDisplayValues();
+  const history = [];
+
+  for (let i = values.length - 1; i >= 0 && history.length < limit; i--) {
+    const rowUser = String(values[i][1] || "").trim();
+    const detail = String(values[i][3] || "");
+    const belongsToUser =
+      rowUser === userName ||
+      (rowUser === "複数ユーザー" && detail.indexOf(userName + " /") !== -1);
+    if (!belongsToUser) continue;
+
+    history.push({
+      timestamp: String(values[i][0] || ""),
+      operation: String(values[i][2] || ""),
+      detail: detail,
+    });
+  }
+
+  return { ok: true, history: history };
 }
 
 function getOwnedSheet_() {
