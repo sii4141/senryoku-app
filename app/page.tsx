@@ -2254,7 +2254,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.294
+        v1.295
 </div>
 
       <style jsx>{`
