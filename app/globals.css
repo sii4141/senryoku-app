@@ -430,6 +430,10 @@ a:active {
   opacity: 1;
 }
 
+.own-all-label-compact {
+  display: none;
+}
+
 .owned-model-markers {
   display: flex;
   flex: 0 0 auto;
@@ -605,11 +609,44 @@ a:active {
   .ownership-series-header.is-capital {
     flex-wrap: wrap;
     justify-content: flex-end !important;
+    gap: 4px !important;
   }
 
   .ownership-series-header.is-capital .ownership-series-label {
     flex: 1 0 100% !important;
     padding-bottom: 4px !important;
+  }
+
+  .ownership-series-header.is-capital .point-actions {
+    gap: 4px !important;
+  }
+
+  .ownership-series-header.is-capital .point-actions button {
+    min-width: 36px;
+    padding: 7px 6px !important;
+  }
+
+  .ownership-series-header.is-capital .point-actions input {
+    width: 50px !important;
+  }
+
+  .ownership-series-header.is-capital .own-all-toggle {
+    width: 34px;
+    height: 38px;
+    flex-basis: 34px;
+  }
+
+  .ownership-series-header.is-capital .owned-toggle {
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  .own-all-label-full {
+    display: none;
+  }
+
+  .own-all-label-compact {
+    display: inline;
   }
 
   .user-grid {

@@ -1382,7 +1382,8 @@ export default function Home() {
             aria-label={`${groupLabel}のすべてのモデルを所有にする`}
             title={ownsAllSeriesItems ? "すべて所有済み" : "シリーズ内をすべて所有にする"}
           >
-            全所持
+            <span className="own-all-label-full">全所持</span>
+            <span className="own-all-label-compact">全</span>
           </button>
 
           {isCapitalGroup && parentItem && (
@@ -2254,7 +2255,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.295
+        v1.296
 </div>
 
       <style jsx>{`
