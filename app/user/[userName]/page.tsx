@@ -94,6 +94,8 @@ export default function UserDetailPage() {
         const res = await fetch("/api/gas", {
           method: "POST",
           body: JSON.stringify({ action: "export" }),
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" },
         });
         const data = await res.json();
         if (!alive || !data?.ok) return;

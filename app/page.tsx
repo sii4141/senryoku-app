@@ -261,6 +261,8 @@ export default function Home() {
     const res = await fetch("/api/gas", {
       method: "POST",
       body: JSON.stringify(payload),
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache" },
     });
     const text = await res.text();
 
@@ -431,6 +433,8 @@ export default function Home() {
     const res = await fetch("/api/gas", {
       method: "POST",
       body: JSON.stringify({ action: "export" }),
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache" },
     });
     return await res.json();
   }
@@ -2255,7 +2259,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.296
+        v1.297
 </div>
 
       <style jsx>{`
