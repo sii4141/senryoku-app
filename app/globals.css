@@ -409,6 +409,14 @@ a:active {
   gap: 8px;
 }
 
+.ownership-series-header.is-capital {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ownership-series-header.is-capital .ownership-series-controls {
+  grid-row: 2;
+}
+
 .ownership-series-label {
   min-width: 0;
   padding: 8px 6px;
