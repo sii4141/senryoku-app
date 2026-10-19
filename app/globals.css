@@ -401,6 +401,54 @@ a:active {
   transform: scale(1.04);
 }
 
+.ownership-series-header {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.ownership-series-header.is-label-stacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ownership-series-label {
+  min-width: 0;
+  padding: 8px 6px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ownership-series-header.is-label-stacked .ownership-series-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.ownership-series-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ownership-series-header.is-label-stacked .ownership-series-controls {
+  grid-row: 2;
+}
+
+.ownership-series-measure {
+  position: absolute;
+  visibility: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .own-all-toggle {
   width: 38px;
   height: 38px;
@@ -653,14 +701,15 @@ a:active {
   }
 
   .ownership-series-header {
-    flex-wrap: wrap;
-    justify-content: flex-end !important;
     gap: 3px !important;
   }
 
-  .ownership-series-header .ownership-series-label {
-    flex: 1 0 100% !important;
-    padding-bottom: 4px !important;
+  .ownership-series-header.is-label-stacked .ownership-series-label {
+    padding-bottom: 4px;
+  }
+
+  .ownership-series-controls {
+    gap: 3px;
   }
 
   .ownership-series-header .point-actions {

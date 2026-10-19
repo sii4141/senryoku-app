@@ -2,6 +2,7 @@
 // npm run dev
 // npm.cmd run dev
 import { useEffect, useMemo, useState, useRef } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import initialData from "@/src/data/data.json";
 import Link from "next/link";
 import {
@@ -211,6 +212,80 @@ function formatJstTimestamp(date = new Date()) {
   }).formatToParts(date);
   const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
   return `${values.year}/${values.month}/${values.day} ${values.hour}:${values.minute}:${values.second}`;
+}
+
+function OwnershipSeriesHeader({
+  label,
+  expanded,
+  onToggle,
+  isCapital,
+  background,
+  controls,
+}: {
+  label: string;
+  expanded: boolean;
+  onToggle: () => void;
+  isCapital: boolean;
+  background: string;
+  controls: ReactNode;
+}) {
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const controlsRef = useRef<HTMLDivElement | null>(null);
+  const measureRef = useRef<HTMLSpanElement | null>(null);
+  const [stackLabel, setStackLabel] = useState(false);
+
+  useEffect(() => {
+    const header = headerRef.current;
+    const controlsBox = controlsRef.current;
+    const measure = measureRef.current;
+    if (!header || !controlsBox || !measure) return;
+
+    const updateLayout = () => {
+      const styles = getComputedStyle(header);
+      const contentWidth = header.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight);
+      const labelWidth = measure.getBoundingClientRect().width + 12;
+      const controlsWidth = controlsBox.getBoundingClientRect().width;
+      setStackLabel(labelWidth + controlsWidth + 8 > contentWidth);
+    };
+    const observer = new ResizeObserver(updateLayout);
+    observer.observe(header);
+    observer.observe(controlsBox);
+    updateLayout();
+    return () => observer.disconnect();
+  }, [label]);
+
+  const style: CSSProperties = {
+    width: "100%",
+    padding: 8,
+    border: "1px solid rgba(17, 24, 39, 0.14)",
+    borderRadius: 12,
+    background,
+    color: "#111827",
+  };
+
+  return (
+    <div
+      ref={headerRef}
+      className={`ownership-series-header${isCapital ? " is-capital" : ""}${stackLabel ? " is-label-stacked" : ""}`}
+      style={style}
+    >
+      <button
+        className="ownership-series-label"
+        type="button"
+        aria-expanded={expanded}
+        onClick={onToggle}
+      >
+        <span aria-hidden="true">{expanded ? "▼" : "▶"}</span>{" "}
+        <span>{label}</span>
+        <span ref={measureRef} className="ownership-series-measure" aria-hidden="true">
+          ▶ {label}
+        </span>
+      </button>
+      <div ref={controlsRef} className="ownership-series-controls">
+        {controls}
+      </div>
+    </div>
+  );
 }
 
 function emptyUnusedPoints(): UnusedPointsMap {
@@ -1378,46 +1453,17 @@ export default function Home() {
 
     return (
       <div key={group.series} style={{ marginTop: 6 }}>
-        <div
-          className={`ownership-series-header${isCapitalGroup ? " is-capital" : ""}`}
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 8,
-            padding: 8,
-            border: "1px solid rgba(17, 24, 39, 0.14)",
-            borderRadius: 12,
-            background: CLASS_COLOR[parentClass] || CLASS_COLOR[classifyByName(childItems[0]?.name || "")] || "#f3f4f6",
-            color: "#111827",
-          }}
-        >
-          <button
-            className="ownership-series-label"
-            type="button"
-            aria-expanded={expanded}
-            onClick={() => setExpandedModuleGroups((previous) => ({
+        <OwnershipSeriesHeader
+          label={groupLabel}
+          expanded={expanded}
+          isCapital={isCapitalGroup}
+          background={CLASS_COLOR[parentClass] || CLASS_COLOR[classifyByName(childItems[0]?.name || "")] || "#f3f4f6"}
+          onToggle={() => setExpandedModuleGroups((previous) => ({
               ...previous,
               [group.series]: !previous[group.series],
             }))}
-            style={{
-              minWidth: 0,
-              flex: 1,
-              padding: "8px 6px",
-              border: 0,
-              background: "transparent",
-              color: "inherit",
-              fontSize: 14,
-              fontWeight: 800,
-              cursor: "pointer",
-              textAlign: "left",
-            }}
-          >
-            <span aria-hidden="true">{expanded ? "▼" : "▶"}</span>{" "}
-            {groupLabel}
-          </button>
-
+          controls={
+            <>
           {childMarkers.length > 0 && (
             <div
               className="owned-model-markers"
@@ -1493,7 +1539,9 @@ export default function Home() {
               {parentOwned ? "◯" : ""}
             </button>
           )}
-        </div>
+            </>
+          }
+        />
 
         {expanded && (
           <div style={{ marginTop: 6, padding: "6px 6px 0", border: "1px solid rgba(17, 24, 39, 0.14)", borderRadius: 12, background: "rgba(255, 255, 255, 0.5)", overflow: "hidden" }}>
@@ -2400,7 +2448,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.32
+        v1.33
 </div>
 
       <style jsx>{`
