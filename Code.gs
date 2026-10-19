@@ -1,5 +1,7 @@
 const SHEET_OWNED = "所持設計図";
 const SHEET_MASTER = "データ(変更禁止)";
+const SHEET_TOP_AUTH = "トップ認証";
+const TOP_AUTH_USER_COL = 2; // B
 
 const USER_COL = 2;
 const USER_ROW_START = 3;
@@ -87,6 +89,10 @@ function doPost(e) {
 
     if (action === "batchUpsertPoints") {
       return jsonOut_(batchUpsertPoints_(body.changes));
+    }
+
+    if (action === "batchUpsertTopAuth") {
+      return jsonOut_(batchUpsertTopAuth_(body.changes));
     }
 
     if (action === "export") {
@@ -562,6 +568,149 @@ function batchUpsertPoints_(changes) {
   };
 }
 
+function batchUpsertTopAuth_(changes) {
+  if (!Array.isArray(changes) || changes.length === 0) {
+    return { ok: false, error: "empty top auth changes" };
+  }
+  if (changes.length > 500) {
+    return { ok: false, error: "too many top auth changes" };
+  }
+
+  const sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_TOP_AUTH);
+  if (!sheet) return { ok: false, error: "Sheet not found: " + SHEET_TOP_AUTH };
+
+  const lastCol = Math.max(sheet.getLastColumn(), TOP_AUTH_USER_COL);
+  const headers = sheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
+  const seriesCols = {};
+  headers.forEach(function (value, index) {
+    const name = normalize_(String(value || "").trim());
+    if (name) seriesCols[name] = index + 1;
+  });
+
+  const lastRow = Math.max(sheet.getLastRow(), 1);
+  const userRows = {};
+  if (lastRow >= 2) {
+    const userValues = sheet.getRange(2, TOP_AUTH_USER_COL, lastRow - 1, 1).getDisplayValues();
+    userValues.forEach(function (row, index) {
+      const userName = String(row[0] || "").trim();
+      if (userName) userRows[userName] = index + 2;
+    });
+  }
+
+  const preparedByCell = {};
+  const errors = [];
+  const newUserRows = {};
+  let nextUserRow = Math.max(lastRow + 1, 2);
+
+  changes.forEach(function (change) {
+    const userName = String(change.userName || "").trim();
+    const series = String(change.series || "").trim();
+    const col = seriesCols[normalize_(series)] || 0;
+    if (!userName || !series || !col) {
+      errors.push({ ok: false, error: "missing user or series column", userName: userName, series: series });
+      return;
+    }
+
+    let value = null;
+    if (change.top !== null && change.top !== "" && change.top !== undefined) {
+      value = Math.floor(Number(change.top));
+      if (!Number.isFinite(value) || value < 0 || value > 20) {
+        errors.push({ ok: false, error: "top auth must be 0-20", userName: userName, series: series });
+        return;
+      }
+    }
+
+    let row = userRows[userName];
+    if (!row) {
+      row = nextUserRow++;
+      userRows[userName] = row;
+      newUserRows[userName] = row;
+    }
+
+    const cellA1 = sheet.getRange(row, col).getA1Notation();
+    preparedByCell[cellA1] = {
+      userName: userName,
+      series: series,
+      row: row,
+      col: col,
+      top: value,
+    };
+  });
+
+  if (errors.length > 0) {
+    return { ok: false, error: "invalid top auth changes", failed: errors };
+  }
+
+  Object.keys(newUserRows).forEach(function (userName) {
+    sheet.getRange(newUserRows[userName], TOP_AUTH_USER_COL).setValue(userName);
+  });
+
+  const clearCells = [];
+  const cellsByValue = {};
+  const prepared = Object.keys(preparedByCell).map(function (cellA1) {
+    const change = preparedByCell[cellA1];
+    if (change.top === null) {
+      clearCells.push(cellA1);
+    } else {
+      const valueKey = String(change.top);
+      if (!cellsByValue[valueKey]) cellsByValue[valueKey] = [];
+      cellsByValue[valueKey].push(cellA1);
+    }
+    return change;
+  });
+
+  if (clearCells.length > 0) sheet.getRangeList(clearCells).clearContent();
+  Object.keys(cellsByValue).forEach(function (valueKey) {
+    sheet.getRangeList(cellsByValue[valueKey]).setValue(Number(valueKey));
+  });
+
+  return {
+    ok: true,
+    processed: prepared.length,
+    clearedCount: clearCells.length,
+    results: prepared,
+  };
+}
+
+function exportTopAuth_() {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_TOP_AUTH);
+  if (!sheet || sheet.getLastRow() < 2 || sheet.getLastColumn() < 1) return {};
+
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0] || [];
+  const result = {};
+
+  for (let row = 1; row < values.length; row++) {
+    const userName = String(values[row][TOP_AUTH_USER_COL - 1] || "").trim();
+    if (!userName) continue;
+    result[userName] = {};
+
+    for (let col = 0; col < headers.length; col++) {
+      if (col === TOP_AUTH_USER_COL - 1) continue;
+      const series = String(headers[col] || "").trim();
+      if (!series) continue;
+      const cell = values[row][col];
+      if (cell === "" || cell === null) continue;
+      const top = Math.floor(Number(cell));
+      if (Number.isFinite(top) && top >= 0 && top <= 20) result[userName][series] = top;
+    }
+  }
+
+  return result;
+}
+
+function clearTopAuthUser_(userName) {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_TOP_AUTH);
+  if (!sheet || sheet.getLastRow() < 2) return;
+  const values = sheet.getRange(2, TOP_AUTH_USER_COL, sheet.getLastRow() - 1, 1).getDisplayValues();
+  for (let index = 0; index < values.length; index++) {
+    if (String(values[index][0] || "").trim() === userName) {
+      sheet.getRange(index + 2, 1, 1, Math.max(sheet.getLastColumn(), TOP_AUTH_USER_COL)).clearContent();
+      return;
+    }
+  }
+}
+
 function deleteUser_(userName) {
   if (!userName) return { ok: false, error: "empty userName" };
 
@@ -590,6 +739,8 @@ function deleteUser_(userName) {
     sh.getRange(row, letterToColumn_(UNUSED_PT_COL[cls])).clearContent();
   });
 
+  clearTopAuthUser_(userName);
+
   return { ok: true, deletedRow: row };
 }
 
@@ -609,6 +760,7 @@ function export_() {
   const users = {};
   const seriesPointsByUser = {};
   const unusedPointsByUser = {};
+  const topAuthByUser = exportTopAuth_();
 
   for (let r = 0; r < numUsers; r++) {
     const row = values[r];
@@ -649,6 +801,7 @@ function export_() {
     users: users,
     seriesPointsByUser: seriesPointsByUser,
     unusedPointsByUser: unusedPointsByUser,
+    topAuthByUser: topAuthByUser,
   };
 }
 

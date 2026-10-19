@@ -31,6 +31,8 @@ const HERO_SHIP_NAMES = new Set([
 // ✅ Ptは「未入力」を許可する
 type SeriesPointsMap = Partial<Record<string, number>>;
 type SeriesPointsByUserMap = Record<string, SeriesPointsMap>;
+type TopAuthMap = Partial<Record<string, number>>;
+type TopAuthByUserMap = Record<string, TopAuthMap>;
 
 // -------------------- 未使用Pt（艦種ごと） --------------------
 const UNUSED_CLASSES = [
@@ -113,6 +115,12 @@ type PendingPointChange =
   | { kind: "series"; userName: string; series: string; pt: number | null }
   | { kind: "unused"; userName: string; cls: UnusedClass; pt: number | null };
 
+type PendingTopAuthChange = {
+  userName: string;
+  series: string;
+  top: number | null;
+};
+
 type ScrollState = {
   winY: number;
   seriesY: number;
@@ -144,6 +152,7 @@ type UiState = {
   shipQuery: string;
   seriesDraftByUser: Record<string, Record<string, string>>;
   unusedDraftByUser: Record<string, Record<string, string>>;
+  topAuthDraftByUser: Record<string, Record<string, string>>;
 };
 
 function loadUiState(): UiState | null {
@@ -169,6 +178,7 @@ function saveUiState(partial: Partial<UiState>) {
 const STORAGE_KEY_USERS = "senryoku_users_local_v1";
 const STORAGE_KEY_SERIES_POINTS_BY_USER = "senryoku_series_points_by_user_local_v1";
 const STORAGE_KEY_UNUSED_POINTS_BY_USER = "senryoku_unused_points_by_user_local_v1";
+const STORAGE_KEY_TOP_AUTH_BY_USER = "senryoku_top_auth_by_user_local_v1";
 const STORAGE_KEY_SELECTED_USER = "senryoku_selected_user_v1";
 const STORAGE_KEY_UI_STATE = "senryoku_ui_state_v1";
 const STORAGE_KEY_SCROLL_STATE = "senryoku_scroll_state_v1";
@@ -222,9 +232,11 @@ export default function Home() {
   const [users, setUsers] = useState<UsersMap>({});
   const [seriesPointsByUser, setSeriesPointsByUser] = useState<SeriesPointsByUserMap>({});
   const [unusedPointsByUser, setUnusedPointsByUser] = useState<UnusedPointsByUserMap>({});
+  const [topAuthByUser, setTopAuthByUser] = useState<TopAuthByUserMap>({});
     // 入力中の下書き（未確定）
   const [seriesDraftByUser, setSeriesDraftByUser] = useState<Record<string, Record<string, string>>>({});
   const [unusedDraftByUser, setUnusedDraftByUser] = useState<Record<string, Record<string, string>>>({});
+  const [topAuthDraftByUser, setTopAuthDraftByUser] = useState<Record<string, Record<string, string>>>({});
 
   const [selectedUser, setSelectedUser] = useState<string>("");
   const [newUserName, setNewUserName] = useState<string>("");
@@ -250,6 +262,7 @@ export default function Home() {
   const pendingPointRef = useRef<Map<string, PendingPointChange>>(new Map());
   const pointSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pointSavingRef = useRef(false);
+  const pendingTopAuthRef = useRef<Map<string, PendingTopAuthChange>>(new Map());
   const historyRequestRef = useRef(0);
 
   // +5/-5を連打したときも、Reactの再描画を待たずに最新値を参照するためのref
@@ -404,6 +417,23 @@ export default function Home() {
     throw lastError instanceof Error ? lastError : new Error("ポイントの一括保存に失敗しました");
   }
 
+  async function apiBatchUpsertTopAuth(changes: PendingTopAuthChange[]) {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        return await gasPost({ action: "batchUpsertTopAuth", changes });
+      } catch (error) {
+        lastError = error;
+        if (attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+        }
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error("TOP認証の一括保存に失敗しました");
+  }
+
   async function apiUpsertPt(userName: string, series: string, pt: number | null) {
   return await gasPost({
     action: "upsertPt",
@@ -445,6 +475,7 @@ export default function Home() {
     const hasPendingChanges =
       pendingOwnershipRef.current.size > 0 ||
       pendingPointRef.current.size > 0 ||
+      pendingTopAuthRef.current.size > 0 ||
       ownershipSavingRef.current ||
       pointSavingRef.current;
 
@@ -461,6 +492,7 @@ export default function Home() {
       if (data.users) setUsers(data.users);
       if (data.seriesPointsByUser) setSeriesPointsByUser(data.seriesPointsByUser);
       if (data.unusedPointsByUser) setUnusedPointsByUser(data.unusedPointsByUser);
+      if (data.topAuthByUser) setTopAuthByUser(data.topAuthByUser);
       setRefreshStatus("success");
     } catch (error) {
       console.error("手動更新に失敗:", error);
@@ -474,14 +506,17 @@ export default function Home() {
       const savedUsers = localStorage.getItem(STORAGE_KEY_USERS);
       const savedPts = localStorage.getItem(STORAGE_KEY_SERIES_POINTS_BY_USER);
       const savedUnused = localStorage.getItem(STORAGE_KEY_UNUSED_POINTS_BY_USER);
+      const savedTopAuth = localStorage.getItem(STORAGE_KEY_TOP_AUTH_BY_USER);
 
       const u = savedUsers ? (JSON.parse(savedUsers) as UsersMap) : ((initialData as any).users || {});
       const p = savedPts ? (JSON.parse(savedPts) as SeriesPointsByUserMap) : {};
       const un = savedUnused ? (JSON.parse(savedUnused) as UnusedPointsByUserMap) : {};
+      const top = savedTopAuth ? (JSON.parse(savedTopAuth) as TopAuthByUserMap) : {};
 
       setUsers(u || {});
       setSeriesPointsByUser(p || {});
       setUnusedPointsByUser(un || {});
+      setTopAuthByUser(top || {});
        // ✅ 追加：選択ユーザー復元
       const savedSelected = localStorage.getItem(STORAGE_KEY_SELECTED_USER);
       if (savedSelected) setSelectedUser(savedSelected);
@@ -489,6 +524,7 @@ export default function Home() {
       setUsers(((initialData as any).users || {}) as UsersMap);
       setSeriesPointsByUser({});
       setUnusedPointsByUser({});
+      setTopAuthByUser({});
     
     }
     const ui = loadUiState();
@@ -499,6 +535,7 @@ export default function Home() {
       setShipQuery(ui.shipQuery || "");
       setSeriesDraftByUser(ui.seriesDraftByUser || {});
       setUnusedDraftByUser(ui.unusedDraftByUser || {});
+      setTopAuthDraftByUser(ui.topAuthDraftByUser || {});
     }
 
 
@@ -521,6 +558,7 @@ export default function Home() {
       shipQuery,
       seriesDraftByUser,
       unusedDraftByUser,
+      topAuthDraftByUser,
     });
   }, [
     selectedUser,
@@ -529,6 +567,7 @@ export default function Home() {
     shipQuery,
     seriesDraftByUser,
     unusedDraftByUser,
+    topAuthDraftByUser,
   ]);
   useEffect(() => {
     const handler = () => {
@@ -539,6 +578,7 @@ export default function Home() {
         shipQuery,
         seriesDraftByUser,
         unusedDraftByUser,
+        topAuthDraftByUser,
       });
     };
     window.addEventListener("pagehide", handler);
@@ -547,7 +587,7 @@ export default function Home() {
       window.removeEventListener("pagehide", handler);
       document.removeEventListener("visibilitychange", handler);
     };
-  }, [selectedUser, userQuery, shipType, shipQuery, seriesDraftByUser, unusedDraftByUser]);
+  }, [selectedUser, userQuery, shipType, shipQuery, seriesDraftByUser, unusedDraftByUser, topAuthDraftByUser]);
 
   useEffect(() => {
     let raf = 0;
@@ -634,6 +674,7 @@ export default function Home() {
           if (data.seriesPointsByUser) setSeriesPointsByUser(data.seriesPointsByUser);
 
           if (data.unusedPointsByUser) setUnusedPointsByUser(data.unusedPointsByUser);
+          if (data.topAuthByUser) setTopAuthByUser(data.topAuthByUser);
         }
       } catch (e) {
         console.error("apiExport failed:", e);
@@ -666,6 +707,10 @@ export default function Home() {
   }, [unusedPointsByUser]);
 
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_TOP_AUTH_BY_USER, JSON.stringify(topAuthByUser || {}));
+  }, [topAuthByUser]);
+
+  useEffect(() => {
     return () => {
       if (ownershipSaveTimerRef.current) clearTimeout(ownershipSaveTimerRef.current);
       if (pointSaveTimerRef.current) clearTimeout(pointSaveTimerRef.current);
@@ -675,7 +720,7 @@ export default function Home() {
   useEffect(() => {
     const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
       const ownershipIdle = pendingOwnershipRef.current.size === 0 && !ownershipSavingRef.current;
-      const pointsIdle = pendingPointRef.current.size === 0 && !pointSavingRef.current;
+      const pointsIdle = pendingPointRef.current.size === 0 && pendingTopAuthRef.current.size === 0 && !pointSavingRef.current;
       if (ownershipIdle && pointsIdle) return;
       event.preventDefault();
       event.returnValue = "";
@@ -883,6 +928,7 @@ export default function Home() {
     setUsers((prev) => ({ ...prev, [n]: [] }));
     setSeriesPointsByUser((prev) => ({ ...prev, [n]: {} }));
     setUnusedPointsByUser((prev) => ({ ...prev, [n]: emptyUnusedPoints() }));
+    setTopAuthByUser((prev) => ({ ...prev, [n]: {} }));
   
     return { user: n, created: true };
   }
@@ -906,6 +952,12 @@ export default function Home() {
     });
 
     setUnusedPointsByUser((prev) => {
+      const next = { ...prev };
+      delete next[n];
+      return next;
+    });
+
+    setTopAuthByUser((prev) => {
       const next = { ...prev };
       delete next[n];
       return next;
@@ -1043,7 +1095,7 @@ export default function Home() {
       series,
       pt,
     });
-    setPointPendingCount(pendingPointRef.current.size);
+    setPointPendingCount(pendingPointRef.current.size + pendingTopAuthRef.current.size);
     setPointSaveStatus("pending");
     schedulePointSave();
   }
@@ -1055,7 +1107,18 @@ export default function Home() {
       cls,
       pt,
     });
-    setPointPendingCount(pendingPointRef.current.size);
+    setPointPendingCount(pendingPointRef.current.size + pendingTopAuthRef.current.size);
+    setPointSaveStatus("pending");
+    schedulePointSave();
+  }
+
+  function scheduleTopAuthSave(userName: string, series: string, top: number | null) {
+    pendingTopAuthRef.current.set(`${userName}::${series}`, {
+      userName,
+      series,
+      top,
+    });
+    setPointPendingCount(pendingPointRef.current.size + pendingTopAuthRef.current.size);
     setPointSaveStatus("pending");
     schedulePointSave();
   }
@@ -1070,49 +1133,67 @@ export default function Home() {
   async function flushPointChanges() {
     if (pointSavingRef.current) return;
 
-    const entries = Array.from(pendingPointRef.current.entries());
-    if (entries.length === 0) return;
+    const pointEntries = Array.from(pendingPointRef.current.entries());
+    const topAuthEntries = Array.from(pendingTopAuthRef.current.entries());
+    if (pointEntries.length === 0 && topAuthEntries.length === 0) return;
 
     pointSaveTimerRef.current = null;
-    entries.forEach(([key]) => pendingPointRef.current.delete(key));
-    setPointPendingCount(pendingPointRef.current.size);
+    pointEntries.forEach(([key]) => pendingPointRef.current.delete(key));
+    topAuthEntries.forEach(([key]) => pendingTopAuthRef.current.delete(key));
+    setPointPendingCount(pendingPointRef.current.size + pendingTopAuthRef.current.size);
     pointSavingRef.current = true;
     setPointSaveStatus("saving");
     let failed = false;
 
     try {
-      const changes = entries.map(([, change]) => change);
-      await apiBatchUpsertPoints(changes);
+      const pointChanges = pointEntries.map(([, change]) => change);
+      const topAuthChanges = topAuthEntries.map(([, change]) => change);
+      if (pointChanges.length > 0) await apiBatchUpsertPoints(pointChanges);
+      if (topAuthChanges.length > 0) await apiBatchUpsertTopAuth(topAuthChanges);
 
-      const userNames = Array.from(new Set(changes.map((change) => change.userName)));
+      const userNames = Array.from(new Set(
+        [...pointChanges, ...topAuthChanges].map((change) => change.userName)
+      ));
+      const detailLines = [
+        ...pointChanges.map((change) => {
+          const target = change.kind === "series" ? change.series : change.cls;
+          const pointType = change.kind === "series" ? "技術Pt" : "未使用Pt";
+          const value = change.pt === null ? "空欄（クリア）" : String(change.pt);
+          return `${change.userName} / ${pointType} / ${target} / ${value}`;
+        }),
+        ...topAuthChanges.map((change) => {
+          const value = change.top === null ? "空欄（クリア）" : `TOP${change.top}`;
+          return `${change.userName} / TOP認証 / ${change.series} / ${value}`;
+        }),
+      ];
       await apiWriteLog(
         userNames.length === 1 ? userNames[0] : "複数ユーザー",
         "ポイント変更",
         [
-          `${changes.length}件を一括反映`,
-          ...changes.map((change, index) => {
-            const target = change.kind === "series" ? change.series : change.cls;
-            const pointType = change.kind === "series" ? "技術Pt" : "未使用Pt";
-            const value = change.pt === null ? "空欄（クリア）" : String(change.pt);
-            return `${index + 1}. ${change.userName} / ${pointType} / ${target} / ${value}`;
-          }),
+          `${detailLines.length}件を一括反映`,
+          ...detailLines.map((line, index) => `${index + 1}. ${line}`),
         ].join("\n")
       );
       setPointSaveStatus("saved");
     } catch (error) {
       failed = true;
-      entries.forEach(([key, change]) => {
+      pointEntries.forEach(([key, change]) => {
         if (!pendingPointRef.current.has(key)) {
           pendingPointRef.current.set(key, change);
         }
       });
-      setPointPendingCount(pendingPointRef.current.size);
+      topAuthEntries.forEach(([key, change]) => {
+        if (!pendingTopAuthRef.current.has(key)) {
+          pendingTopAuthRef.current.set(key, change);
+        }
+      });
+      setPointPendingCount(pendingPointRef.current.size + pendingTopAuthRef.current.size);
       setPointSaveStatus("error");
       console.error("ポイントの一括保存に失敗", error);
       alert("ポイントを保存できませんでした。ページを閉じず、もう一度入力してください。");
     } finally {
       pointSavingRef.current = false;
-      if (pendingPointRef.current.size > 0 && !failed) {
+      if ((pendingPointRef.current.size > 0 || pendingTopAuthRef.current.size > 0) && !failed) {
         schedulePointSave();
       }
     }
@@ -1390,6 +1471,8 @@ export default function Home() {
             <span className="own-all-label-compact">全</span>
           </button>
 
+          {renderTopAuthInput(group.series)}
+
           {isCapitalGroup && parentItem && (
             <button
               className="owned-toggle"
@@ -1513,6 +1596,63 @@ export default function Home() {
             +5
           </button>
       </div>
+    );
+  }
+
+  function renderTopAuthInput(series: string) {
+    if (!selectedUser) return null;
+
+    const saved = topAuthByUser[selectedUser]?.[series];
+    const draft = topAuthDraftByUser[selectedUser]?.[series];
+    const displayValue = draft !== undefined ? draft : (saved === undefined ? "" : String(saved));
+
+    return (
+      <label className="top-auth-control" title={`${series}のTOP認証（0〜20）`}>
+        <input
+          type="number"
+          inputMode="numeric"
+          placeholder="TOP"
+          min={0}
+          max={20}
+          step={1}
+          value={displayValue}
+          aria-label={`${series}のTOP認証`}
+          onChange={(event) => {
+            if (!selectedUser) return;
+            const raw = event.target.value;
+            if (raw !== "" && (!/^\d{1,2}$/.test(raw) || Number(raw) > 20)) return;
+            setTopAuthDraftByUser((previous) => ({
+              ...previous,
+              [selectedUser]: { ...(previous[selectedUser] || {}), [series]: raw },
+            }));
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") (event.target as HTMLInputElement).blur();
+          }}
+          onBlur={() => {
+            if (!selectedUser) return;
+            const userName = selectedUser;
+            const raw = topAuthDraftByUser[userName]?.[series];
+            if (raw === undefined) return;
+
+            const value = raw.trim() === "" ? null : Math.min(20, Math.max(0, Math.floor(Number(raw))));
+            setTopAuthByUser((previous) => {
+              const userValues = { ...(previous[userName] || {}) };
+              if (value === null) delete userValues[series];
+              else userValues[series] = value;
+              return { ...previous, [userName]: userValues };
+            });
+            setTopAuthDraftByUser((previous) => {
+              const next = { ...previous };
+              const userDrafts = { ...(next[userName] || {}) };
+              delete userDrafts[series];
+              next[userName] = userDrafts;
+              return next;
+            });
+            scheduleTopAuthSave(userName, series, value);
+          }}
+        />
+      </label>
     );
   }
 
@@ -1675,6 +1815,7 @@ export default function Home() {
                       if (latest.users) setUsers(latest.users);
                       if (latest.seriesPointsByUser) setSeriesPointsByUser(latest.seriesPointsByUser);
                       if (latest.unusedPointsByUser) setUnusedPointsByUser(latest.unusedPointsByUser);
+                      if (latest.topAuthByUser) setTopAuthByUser(latest.topAuthByUser);
                     }
                     return;
                   }
@@ -1974,7 +2115,7 @@ export default function Home() {
           >
             <div style={{ fontWeight: 800 }}>入力方法</div>
             <div>① 艦種をタップ → ② シリーズ・親艦をタップ → ③ 設計図・モジュールを表示</div>
-            <div>技術Ptはシリーズ・親艦の右側、所有◯は展開後の一覧で入力します。</div>
+            <div>技術PtとTOP認証（0〜20）はシリーズ・親艦の右側、所有◯は展開後の一覧で入力します。</div>
           </div>
 
           {!selectedUser ? (
@@ -2259,7 +2400,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.297
+        v1.3
 </div>
 
       <style jsx>{`

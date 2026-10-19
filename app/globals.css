@@ -434,6 +434,52 @@ a:active {
   display: none;
 }
 
+.top-auth-control {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+  max-height: 38px;
+  flex: 0 0 38px;
+  align-items: center;
+  justify-content: center;
+}
+
+.top-auth-control input {
+  box-sizing: border-box;
+  width: 38px !important;
+  min-width: 0;
+  max-width: 38px;
+  height: 38px;
+  min-height: 38px !important;
+  max-height: 38px;
+  padding: 2px !important;
+  border: 1px solid rgba(15, 118, 110, 0.55);
+  border-radius: 9px;
+  outline: none;
+  color: #134e4a;
+  background: rgba(255, 255, 255, 0.94);
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 900;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+}
+
+.top-auth-control input::placeholder {
+  color: rgba(15, 118, 110, 0.42);
+  font-size: 10px;
+  font-weight: 800;
+  opacity: 1;
+}
+
+.top-auth-control input::-webkit-inner-spin-button,
+.top-auth-control input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
 .owned-model-markers {
   display: flex;
   flex: 0 0 auto;
@@ -606,34 +652,52 @@ a:active {
     padding: 13px !important;
   }
 
-  .ownership-series-header.is-capital {
+  .ownership-series-header {
     flex-wrap: wrap;
     justify-content: flex-end !important;
-    gap: 4px !important;
+    gap: 3px !important;
   }
 
-  .ownership-series-header.is-capital .ownership-series-label {
+  .ownership-series-header .ownership-series-label {
     flex: 1 0 100% !important;
     padding-bottom: 4px !important;
   }
 
-  .ownership-series-header.is-capital .point-actions {
+  .ownership-series-header .point-actions {
     gap: 4px !important;
   }
 
-  .ownership-series-header.is-capital .point-actions button {
-    min-width: 36px;
+  .ownership-series-header .point-actions button {
+    min-width: 34px;
     padding: 7px 6px !important;
   }
 
-  .ownership-series-header.is-capital .point-actions input {
-    width: 50px !important;
+  .ownership-series-header .point-actions input {
+    width: 46px !important;
   }
 
-  .ownership-series-header.is-capital .own-all-toggle {
-    width: 34px;
+  .ownership-series-header .own-all-toggle {
+    width: 32px;
     height: 38px;
-    flex-basis: 34px;
+    flex-basis: 32px;
+  }
+
+  .ownership-series-header .top-auth-control {
+    width: 38px;
+    flex-basis: 38px;
+  }
+
+  .ownership-series-header .top-auth-control input {
+    width: 38px !important;
+    max-width: 38px;
+    height: 38px;
+    min-height: 38px !important;
+    max-height: 38px;
+    font-size: 16px !important;
+  }
+
+  .ownership-series-header .top-auth-control input::placeholder {
+    font-size: 10px;
   }
 
   .ownership-series-header.is-capital .owned-toggle {
