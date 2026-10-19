@@ -11,15 +11,15 @@ const MASTER_NAME_COL = 19; // S
 const MASTER_KEY_COL = 20;  // T
 
 const UNUSED_PT_COL = {
-  "フリゲート": "PN",
-  "駆逐艦": "PO",
-  "巡洋艦": "PP",
-  "戦闘機": "PQ",
-  "護送艦": "PR",
-  "巡洋戦艦": "PS",
-  "航空母艦": "PT",
-  "支援艦": "PU",
-  "戦艦": "PV",
+  "フリゲート": "PR",
+  "駆逐艦": "PS",
+  "巡洋艦": "PT",
+  "戦闘機": "PU",
+  "護送艦": "PV",
+  "巡洋戦艦": "PW",
+  "航空母艦": "PX",
+  "支援艦": "PY",
+  "戦艦": "PZ",
 };
 
 const UNUSED_CLASSES = Object.keys(UNUSED_PT_COL);

@@ -229,31 +229,6 @@ function OwnershipSeriesHeader({
   background: string;
   controls: ReactNode;
 }) {
-  const headerRef = useRef<HTMLDivElement | null>(null);
-  const controlsRef = useRef<HTMLDivElement | null>(null);
-  const measureRef = useRef<HTMLSpanElement | null>(null);
-  const [stackLabel, setStackLabel] = useState(false);
-
-  useEffect(() => {
-    const header = headerRef.current;
-    const controlsBox = controlsRef.current;
-    const measure = measureRef.current;
-    if (!header || !controlsBox || !measure) return;
-
-    const updateLayout = () => {
-      const styles = getComputedStyle(header);
-      const contentWidth = header.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight);
-      const labelWidth = measure.getBoundingClientRect().width + 12;
-      const controlsWidth = controlsBox.getBoundingClientRect().width;
-      setStackLabel(labelWidth + controlsWidth + 8 > contentWidth);
-    };
-    const observer = new ResizeObserver(updateLayout);
-    observer.observe(header);
-    observer.observe(controlsBox);
-    updateLayout();
-    return () => observer.disconnect();
-  }, [label]);
-
   const style: CSSProperties = {
     width: "100%",
     padding: 8,
@@ -265,8 +240,7 @@ function OwnershipSeriesHeader({
 
   return (
     <div
-      ref={headerRef}
-      className={`ownership-series-header${isCapital ? " is-capital" : ""}${stackLabel ? " is-label-stacked" : ""}`}
+      className={`ownership-series-header${isCapital ? " is-capital" : ""}`}
       style={style}
     >
       <button
@@ -277,11 +251,8 @@ function OwnershipSeriesHeader({
       >
         <span aria-hidden="true">{expanded ? "▼" : "▶"}</span>{" "}
         <span>{label}</span>
-        <span ref={measureRef} className="ownership-series-measure" aria-hidden="true">
-          ▶ {label}
-        </span>
       </button>
-      <div ref={controlsRef} className="ownership-series-controls">
+      <div className="ownership-series-controls">
         {controls}
       </div>
     </div>

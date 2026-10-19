@@ -409,10 +409,6 @@ a:active {
   gap: 8px;
 }
 
-.ownership-series-header.is-label-stacked {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .ownership-series-label {
   min-width: 0;
   padding: 8px 6px;
@@ -423,10 +419,6 @@ a:active {
   font-weight: 800;
   text-align: left;
   cursor: pointer;
-  white-space: nowrap;
-}
-
-.ownership-series-header.is-label-stacked .ownership-series-label {
   white-space: normal;
   overflow-wrap: anywhere;
 }
@@ -436,17 +428,6 @@ a:active {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-}
-
-.ownership-series-header.is-label-stacked .ownership-series-controls {
-  grid-row: 2;
-}
-
-.ownership-series-measure {
-  position: absolute;
-  visibility: hidden;
-  white-space: nowrap;
-  pointer-events: none;
 }
 
 .own-all-toggle {
@@ -702,10 +683,6 @@ a:active {
 
   .ownership-series-header {
     gap: 3px !important;
-  }
-
-  .ownership-series-header.is-label-stacked .ownership-series-label {
-    padding-bottom: 4px;
   }
 
   .ownership-series-controls {
