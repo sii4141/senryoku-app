@@ -198,6 +198,14 @@ function displayOwnedItemName(name: string) {
   return name.replace(/\s*[（(][^（）()]+[）)]\s*$/, "");
 }
 
+function getTopAuthColor(top: number | undefined) {
+  if (top === undefined || top <= 0) return "#ffffff";
+  if (top >= 15) return "#9900ff";
+  if (top >= 10) return "#e06666";
+  if (top >= 5) return "#ffff00";
+  return "#ffe599";
+}
+
 function formatJstTimestamp(date = new Date()) {
   const parts = new Intl.DateTimeFormat("ja-JP", {
     timeZone: "Asia/Tokyo",
@@ -1605,6 +1613,7 @@ export default function Home() {
     const saved = topAuthByUser[selectedUser]?.[series];
     const draft = topAuthDraftByUser[selectedUser]?.[series];
     const displayValue = draft !== undefined ? draft : (saved === undefined ? "" : String(saved));
+    const displayTop = displayValue.trim() === "" ? undefined : Number(displayValue);
 
     return (
       <label className="top-auth-control" title={`${series}のTOP認証（0〜20）`}>
@@ -1616,6 +1625,10 @@ export default function Home() {
           max={20}
           step={1}
           value={displayValue}
+          style={{
+            background: getTopAuthColor(Number.isFinite(displayTop) ? displayTop : undefined),
+            color: "#000000",
+          }}
           aria-label={`${series}のTOP認証`}
           onChange={(event) => {
             if (!selectedUser) return;
@@ -2400,7 +2413,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.31
+        v1.32
 </div>
 
       <style jsx>{`

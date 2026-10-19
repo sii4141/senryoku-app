@@ -65,6 +65,14 @@ function formatPercent(value: number, total: number) {
   if (total <= 0) return "0.0%";
   return `${((value / total) * 100).toFixed(1)}%`;
 }
+
+function getTopAuthColor(top: number | undefined) {
+  if (top === undefined || top <= 0) return "#ffffff";
+  if (top >= 15) return "#9900ff";
+  if (top >= 10) return "#e06666";
+  if (top >= 5) return "#ffff00";
+  return "#ffe599";
+}
 function getShipClassTextColor(shipClass: string) {
   switch (shipClass) {
     case "巡洋戦艦":
@@ -401,8 +409,8 @@ export default function UserDetailPage() {
                               width: 48,
                               textAlign: "center",
                               fontWeight: 800,
-                              background: row.top === undefined ? "#f8fafc" : "#ecfeff",
-                              color: row.top === undefined ? "#94a3b8" : "#0f766e",
+                              background: getTopAuthColor(row.top),
+                              color: "#000000",
                             }}
                           >
                             {row.top === undefined ? "—" : row.top}
