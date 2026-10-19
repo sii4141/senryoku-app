@@ -16,6 +16,7 @@ type OwnedItem = { name: string; type: string };
 type UsersMap = Record<string, OwnedItem[]>;
 type SeriesPointsMap = Partial<Record<string, number>>;
 type SeriesPointsByUserMap = Record<string, SeriesPointsMap>;
+type TopAuthByUserMap = Record<string, Partial<Record<string, number>>>;
 
 const UNUSED_CLASSES = [
   "フリゲート",
@@ -36,13 +37,14 @@ type UnusedPointsByUserMap = Record<string, UnusedPointsMap>;
 const STORAGE_KEY_USERS = "senryoku_users_local_v1";
 const STORAGE_KEY_SERIES_POINTS_BY_USER = "senryoku_series_points_by_user_local_v1";
 const STORAGE_KEY_UNUSED_POINTS_BY_USER = "senryoku_unused_points_by_user_local_v1";
+const STORAGE_KEY_TOP_AUTH_BY_USER = "senryoku_top_auth_by_user_local_v1";
 
 const CLASS_COLOR: Record<string, string> = {
   フリゲート: "#9fc5e8",
   駆逐艦: "#ffe599",
   巡洋艦: "#93c47d",
-  護送艦: "#c27ba0",
-  戦闘機: "#f9cb9c",
+  護送艦: "#f9cb9c",
+  戦闘機: "#c27ba0",
   巡洋戦艦: "#3c78d8",
   航空母艦: "#f1c232",
   支援艦: "#cc4125",
@@ -80,6 +82,7 @@ export default function UserDetailPage() {
   const [users, setUsers] = useState<UsersMap>({});
   const [seriesPointsByUser, setSeriesPointsByUser] = useState<SeriesPointsByUserMap>({});
   const [unusedPointsByUser, setUnusedPointsByUser] = useState<UnusedPointsByUserMap>({});
+  const [topAuthByUser, setTopAuthByUser] = useState<TopAuthByUserMap>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -87,6 +90,7 @@ export default function UserDetailPage() {
     setUsers(readLocal(STORAGE_KEY_USERS, fallbackUsers));
     setSeriesPointsByUser(readLocal(STORAGE_KEY_SERIES_POINTS_BY_USER, {}));
     setUnusedPointsByUser(readLocal(STORAGE_KEY_UNUSED_POINTS_BY_USER, {}));
+    setTopAuthByUser(readLocal(STORAGE_KEY_TOP_AUTH_BY_USER, {}));
 
     let alive = true;
     const sync = async () => {
@@ -118,6 +122,13 @@ export default function UserDetailPage() {
             JSON.stringify(data.unusedPointsByUser)
           );
         }
+        if (data.topAuthByUser) {
+          setTopAuthByUser(data.topAuthByUser);
+          localStorage.setItem(
+            STORAGE_KEY_TOP_AUTH_BY_USER,
+            JSON.stringify(data.topAuthByUser)
+          );
+        }
       } catch (error) {
         console.error("ユーザーページのデータ更新に失敗しました", error);
       } finally {
@@ -134,6 +145,7 @@ export default function UserDetailPage() {
   const ownedList = users[userName] || [];
   const seriesPoints = seriesPointsByUser[userName] || {};
   const unusedPoints = unusedPointsByUser[userName] || {};
+  const topAuth = topAuthByUser[userName] || {};
   const exists = Object.prototype.hasOwnProperty.call(users, userName);
 
   const ownedSeries = useMemo(() => {
@@ -149,6 +161,7 @@ export default function UserDetailPage() {
     const allSeries = new Set<string>([
       ...Array.from(ownedSeries),
       ...Object.keys(seriesPoints),
+      ...Object.keys(topAuth),
     ]);
     const order = new Map(SERIES_NAMES.map((name, index) => [name, index]));
 
@@ -156,6 +169,7 @@ export default function UserDetailPage() {
       .map((series) => ({
         series,
         pt: seriesPoints[series] ?? 0,
+        top: topAuth[series],
         shipClass: CLASS_BY_SERIES[series] || "未分類",
         owned: ownedSeries.has(series),
       }))
@@ -165,7 +179,7 @@ export default function UserDetailPage() {
             (order.get(b.series) ?? Number.MAX_SAFE_INTEGER) ||
           a.series.localeCompare(b.series, "ja")
       );
-  }, [ownedSeries, seriesPoints]);
+  }, [ownedSeries, seriesPoints, topAuth]);
 
   // 個別ページに表示する設計図:
   // ・所持している
@@ -343,12 +357,13 @@ export default function UserDetailPage() {
                     <tr style={{ background: "#111827", color: "white" }}>
                       <th style={thStyle}>設計図シリーズ</th>
                       <th style={{ ...thStyle, textAlign: "right" }}>Pt</th>
+                      <th style={{ ...thStyle, textAlign: "center" }}>TOP</th>
                     </tr>
                   </thead>
                   <tbody>
                     {visibleSeriesRows.length === 0 ? (
                       <tr>
-                        <td colSpan={2} style={{ padding: 20, textAlign: "center", color: "#6b7280" }}>
+                        <td colSpan={3} style={{ padding: 20, textAlign: "center", color: "#6b7280" }}>
                           設計図データがありません。
                         </td>
                       </tr>
@@ -379,6 +394,18 @@ export default function UserDetailPage() {
                             }}
                           >
                             {row.pt.toLocaleString()}
+                          </td>
+                          <td
+                            style={{
+                              ...tdStyle,
+                              width: 48,
+                              textAlign: "center",
+                              fontWeight: 800,
+                              background: row.top === undefined ? "#f8fafc" : "#ecfeff",
+                              color: row.top === undefined ? "#94a3b8" : "#0f766e",
+                            }}
+                          >
+                            {row.top === undefined ? "—" : row.top}
                           </td>
                         </tr>
                       ))
