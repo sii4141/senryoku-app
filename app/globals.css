@@ -457,8 +457,8 @@ a:active {
   border: 1px solid rgba(15, 118, 110, 0.55);
   border-radius: 9px;
   outline: none;
-  color: #134e4a;
-  background: rgba(255, 255, 255, 0.94);
+  color: #000;
+  background: #fff;
   font-size: 12px;
   line-height: 1;
   font-weight: 900;
