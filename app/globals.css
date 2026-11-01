@@ -417,6 +417,20 @@ a:active {
   grid-row: 2;
 }
 
+@media (min-width: 701px) {
+  .ownership-series-header.is-capital {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    row-gap: 0;
+  }
+
+  .ownership-series-header.is-capital .ownership-series-controls {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+  }
+}
+
 .ownership-series-label {
   min-width: 0;
   padding: 8px 6px;
