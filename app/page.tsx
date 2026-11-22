@@ -34,6 +34,8 @@ type SeriesPointsMap = Partial<Record<string, number>>;
 type SeriesPointsByUserMap = Record<string, SeriesPointsMap>;
 type TopAuthMap = Partial<Record<string, number>>;
 type TopAuthByUserMap = Record<string, TopAuthMap>;
+type AccountInfo = { accountType: "main" | "sub"; mainUserName: string };
+type AccountInfoByUserMap = Record<string, AccountInfo>;
 
 // -------------------- 未使用Pt（艦種ごと） --------------------
 const UNUSED_CLASSES = [
@@ -180,6 +182,7 @@ const STORAGE_KEY_USERS = "senryoku_users_local_v1";
 const STORAGE_KEY_SERIES_POINTS_BY_USER = "senryoku_series_points_by_user_local_v1";
 const STORAGE_KEY_UNUSED_POINTS_BY_USER = "senryoku_unused_points_by_user_local_v1";
 const STORAGE_KEY_TOP_AUTH_BY_USER = "senryoku_top_auth_by_user_local_v1";
+const STORAGE_KEY_ACCOUNT_INFO_BY_USER = "senryoku_account_info_by_user_local_v1";
 const STORAGE_KEY_SELECTED_USER = "senryoku_selected_user_v1";
 const STORAGE_KEY_UI_STATE = "senryoku_ui_state_v1";
 const STORAGE_KEY_SCROLL_STATE = "senryoku_scroll_state_v1";
@@ -279,6 +282,10 @@ export default function Home() {
   const [seriesPointsByUser, setSeriesPointsByUser] = useState<SeriesPointsByUserMap>({});
   const [unusedPointsByUser, setUnusedPointsByUser] = useState<UnusedPointsByUserMap>({});
   const [topAuthByUser, setTopAuthByUser] = useState<TopAuthByUserMap>({});
+  const [accountInfoByUser, setAccountInfoByUser] = useState<AccountInfoByUserMap>({});
+  const [accountTypeDraft, setAccountTypeDraft] = useState<"main" | "sub" | "">("");
+  const [mainAccountDraft, setMainAccountDraft] = useState("");
+  const [accountSaveStatus, setAccountSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
     // 入力中の下書き（未確定）
   const [seriesDraftByUser, setSeriesDraftByUser] = useState<Record<string, Record<string, string>>>({});
   const [unusedDraftByUser, setUnusedDraftByUser] = useState<Record<string, Record<string, string>>>({});
@@ -505,6 +512,19 @@ export default function Home() {
     });
   }
 
+  async function apiUpsertAccountInfo(
+    userName: string,
+    accountType: "main" | "sub",
+    mainUserName: string
+  ) {
+    return await gasPost({
+      action: "upsertAccountInfo",
+      userName,
+      accountType,
+      mainUserName,
+    });
+  }
+
   async function apiExport() {
     const res = await fetch("/api/gas", {
       method: "POST",
@@ -539,6 +559,7 @@ export default function Home() {
       if (data.seriesPointsByUser) setSeriesPointsByUser(data.seriesPointsByUser);
       if (data.unusedPointsByUser) setUnusedPointsByUser(data.unusedPointsByUser);
       if (data.topAuthByUser) setTopAuthByUser(data.topAuthByUser);
+      if (data.accountInfoByUser) setAccountInfoByUser(data.accountInfoByUser);
       setRefreshStatus("success");
     } catch (error) {
       console.error("手動更新に失敗:", error);
@@ -553,16 +574,19 @@ export default function Home() {
       const savedPts = localStorage.getItem(STORAGE_KEY_SERIES_POINTS_BY_USER);
       const savedUnused = localStorage.getItem(STORAGE_KEY_UNUSED_POINTS_BY_USER);
       const savedTopAuth = localStorage.getItem(STORAGE_KEY_TOP_AUTH_BY_USER);
+      const savedAccountInfo = localStorage.getItem(STORAGE_KEY_ACCOUNT_INFO_BY_USER);
 
       const u = savedUsers ? (JSON.parse(savedUsers) as UsersMap) : ((initialData as any).users || {});
       const p = savedPts ? (JSON.parse(savedPts) as SeriesPointsByUserMap) : {};
       const un = savedUnused ? (JSON.parse(savedUnused) as UnusedPointsByUserMap) : {};
       const top = savedTopAuth ? (JSON.parse(savedTopAuth) as TopAuthByUserMap) : {};
+      const accountInfo = savedAccountInfo ? (JSON.parse(savedAccountInfo) as AccountInfoByUserMap) : {};
 
       setUsers(u || {});
       setSeriesPointsByUser(p || {});
       setUnusedPointsByUser(un || {});
       setTopAuthByUser(top || {});
+      setAccountInfoByUser(accountInfo || {});
        // ✅ 追加：選択ユーザー復元
       const savedSelected = localStorage.getItem(STORAGE_KEY_SELECTED_USER);
       if (savedSelected) setSelectedUser(savedSelected);
@@ -571,6 +595,7 @@ export default function Home() {
       setSeriesPointsByUser({});
       setUnusedPointsByUser({});
       setTopAuthByUser({});
+      setAccountInfoByUser({});
     
     }
     const ui = loadUiState();
@@ -596,6 +621,12 @@ export default function Home() {
   useEffect(() => {
     void loadUserHistory(selectedUser);
   }, [selectedUser]);
+  useEffect(() => {
+    const info = selectedUser ? accountInfoByUser[selectedUser] : undefined;
+    setAccountTypeDraft(info?.accountType || "");
+    setMainAccountDraft(info?.mainUserName || "");
+    setAccountSaveStatus("idle");
+  }, [selectedUser, accountInfoByUser]);
   useEffect(() => {
     saveUiState({
       selectedUser,
@@ -721,6 +752,7 @@ export default function Home() {
 
           if (data.unusedPointsByUser) setUnusedPointsByUser(data.unusedPointsByUser);
           if (data.topAuthByUser) setTopAuthByUser(data.topAuthByUser);
+          if (data.accountInfoByUser) setAccountInfoByUser(data.accountInfoByUser);
         }
       } catch (e) {
         console.error("apiExport failed:", e);
@@ -755,6 +787,10 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_TOP_AUTH_BY_USER, JSON.stringify(topAuthByUser || {}));
   }, [topAuthByUser]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_ACCOUNT_INFO_BY_USER, JSON.stringify(accountInfoByUser || {}));
+  }, [accountInfoByUser]);
 
   useEffect(() => {
     return () => {
@@ -1009,6 +1045,12 @@ export default function Home() {
       return next;
     });
 
+    setAccountInfoByUser((prev) => {
+      const next = { ...prev };
+      delete next[n];
+      return next;
+    });
+
     if (selectedUser === n) setSelectedUser("");
 
     try {
@@ -1016,6 +1058,47 @@ export default function Home() {
       await apiWriteLog(n, "ユーザー削除", `${n} を削除`);
     } catch (e) {
       console.error("deleteUser failed:", e);
+    }
+  }
+
+  async function saveAccountInfo(accountType: "main" | "sub") {
+    if (!selectedUser || accountSaveStatus === "saving") return;
+    const mainUserName = accountType === "sub" ? mainAccountDraft.trim() : "";
+
+    if (accountType === "sub") {
+      if (!mainUserName) {
+        alert("メインアカウントを入力してください");
+        return;
+      }
+      if (mainUserName === selectedUser) {
+        alert("自分自身をメインアカウントには設定できません");
+        return;
+      }
+      if (!Object.prototype.hasOwnProperty.call(users, mainUserName)) {
+        alert("登録済みのユーザー名をメインアカウントとして入力してください");
+        return;
+      }
+    }
+
+    setAccountSaveStatus("saving");
+    try {
+      await apiUpsertAccountInfo(selectedUser, accountType, mainUserName);
+      setAccountInfoByUser((previous) => ({
+        ...previous,
+        [selectedUser]: { accountType, mainUserName },
+      }));
+      setAccountTypeDraft(accountType);
+      if (accountType === "main") setMainAccountDraft("");
+      setAccountSaveStatus("saved");
+      await apiWriteLog(
+        selectedUser,
+        "アカウント種別変更",
+        accountType === "main" ? "メインアカウントに登録" : `サブアカウントに登録 / メイン: ${mainUserName}`
+      );
+    } catch (error) {
+      console.error("アカウント情報の保存に失敗:", error);
+      setAccountSaveStatus("error");
+      alert("アカウント情報を保存できませんでした");
     }
   }
 
@@ -2016,6 +2099,112 @@ export default function Home() {
           </button>
         </div>
 
+        {/* メイン／サブアカウント設定 */}
+        <div className="section-card" style={{ marginTop: 12, marginBottom: 12 }}>
+          <div style={{ fontSize: 14, fontWeight: "bold", marginBottom: 8 }}>アカウント種別</div>
+          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>
+            選択中ユーザーをメインアカウント、またはサブアカウントとして記録します。
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <button
+              type="button"
+              disabled={!selectedUser || accountSaveStatus === "saving"}
+              onClick={() => {
+                setAccountTypeDraft("main");
+                void saveAccountInfo("main");
+              }}
+              style={{
+                padding: "10px 8px",
+                border: accountTypeDraft === "main" ? "2px solid #2563eb" : "1px solid #cbd5e1",
+                borderRadius: 10,
+                color: accountTypeDraft === "main" ? "#1d4ed8" : "#334155",
+                background: accountTypeDraft === "main" ? "#dbeafe" : "#f8fafc",
+                fontWeight: 800,
+                cursor: selectedUser ? "pointer" : "not-allowed",
+              }}
+            >
+              メインアカウント
+            </button>
+            <button
+              type="button"
+              disabled={!selectedUser || accountSaveStatus === "saving"}
+              onClick={() => {
+                setAccountTypeDraft("sub");
+                setAccountSaveStatus("idle");
+              }}
+              style={{
+                padding: "10px 8px",
+                border: accountTypeDraft === "sub" ? "2px solid #7c3aed" : "1px solid #cbd5e1",
+                borderRadius: 10,
+                color: accountTypeDraft === "sub" ? "#6d28d9" : "#334155",
+                background: accountTypeDraft === "sub" ? "#ede9fe" : "#f8fafc",
+                fontWeight: 800,
+                cursor: selectedUser ? "pointer" : "not-allowed",
+              }}
+            >
+              サブアカウント
+            </button>
+          </div>
+
+          {selectedUser && accountTypeDraft === "sub" && (
+            <div style={{ marginTop: 10 }}>
+              <label style={{ display: "block", marginBottom: 5, fontSize: 12, fontWeight: 700 }}>
+                メインアカウントのユーザー名
+              </label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  value={mainAccountDraft}
+                  list="main-account-users"
+                  onChange={(event) => {
+                    setMainAccountDraft(event.target.value);
+                    setAccountSaveStatus("idle");
+                  }}
+                  placeholder="登録済みユーザー名を入力"
+                  style={{ flex: 1, minWidth: 0 }}
+                />
+                <datalist id="main-account-users">
+                  {Object.keys(users)
+                    .filter((userName) => userName !== selectedUser)
+                    .sort((a, b) => a.localeCompare(b, "ja"))
+                    .map((userName) => <option value={userName} key={userName} />)}
+                </datalist>
+                <button
+                  type="button"
+                  disabled={accountSaveStatus === "saving"}
+                  onClick={() => void saveAccountInfo("sub")}
+                  style={{
+                    padding: "9px 14px",
+                    border: 0,
+                    borderRadius: 9,
+                    color: "white",
+                    background: "#7c3aed",
+                    fontWeight: 800,
+                    cursor: accountSaveStatus === "saving" ? "wait" : "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  保存
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ minHeight: 20, marginTop: 7, fontSize: 12, color: accountSaveStatus === "error" ? "#b91c1c" : "#047857" }}>
+            {!selectedUser
+              ? "ユーザーを選択してください"
+              : accountSaveStatus === "saving"
+                ? "保存中…"
+                : accountSaveStatus === "saved"
+                  ? "保存しました"
+                  : accountInfoByUser[selectedUser]
+                    ? accountInfoByUser[selectedUser].accountType === "main"
+                      ? "登録済み：メインアカウント"
+                      : `登録済み：サブアカウント（メイン：${accountInfoByUser[selectedUser].mainUserName}）`
+                    : "未登録"}
+          </div>
+        </div>
+
         {/* 合計 */}
         <div className="section-card" style={{ marginBottom: 12 }}>
           {!selectedUser ? (
@@ -2419,7 +2608,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.341
+        v1.35
 </div>
 
       <style jsx>{`

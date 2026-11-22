@@ -1,6 +1,7 @@
 const SHEET_OWNED = "所持設計図";
 const SHEET_MASTER = "データ(変更禁止)";
 const SHEET_TOP_AUTH = "トップ認証";
+const SHEET_ACCOUNT_INFO = "アカウント情報";
 const TOP_AUTH_USER_COL = 2; // B
 
 const USER_COL = 2;
@@ -56,6 +57,14 @@ function doPost(e) {
 
     if (action === "deleteUser") {
       return jsonOut_(deleteUser_(String(body.userName || "").trim()));
+    }
+
+    if (action === "upsertAccountInfo") {
+      return jsonOut_(upsertAccountInfo_(
+        String(body.userName || "").trim(),
+        String(body.accountType || "").trim(),
+        String(body.mainUserName || "").trim()
+      ));
     }
 
     if (action === "upsertOwn") {
@@ -711,6 +720,84 @@ function clearTopAuthUser_(userName) {
   }
 }
 
+function getAccountInfoSheet_() {
+  // 入力履歴（操作ログ）と同じスプレッドシートに保存する。
+  const ss = SpreadsheetApp.openById(LOG_SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(SHEET_ACCOUNT_INFO);
+  if (!sheet) sheet = ss.insertSheet(SHEET_ACCOUNT_INFO);
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, 3).setValues([["ユーザー名", "種別", "メインアカウント"]]);
+  }
+  return sheet;
+}
+
+function findAccountInfoRow_(sheet, userName) {
+  if (sheet.getLastRow() < 2) return -1;
+  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getDisplayValues();
+  for (let index = 0; index < values.length; index++) {
+    if (String(values[index][0] || "").trim() === userName) return index + 2;
+  }
+  return -1;
+}
+
+function upsertAccountInfo_(userName, accountType, mainUserName) {
+  if (!userName) return { ok: false, error: "empty userName" };
+  if (findUserRow_(userName) < 0) return { ok: false, error: "user not found" };
+  if (accountType !== "main" && accountType !== "sub") {
+    return { ok: false, error: "invalid accountType" };
+  }
+
+  if (accountType === "sub") {
+    if (!mainUserName) return { ok: false, error: "empty mainUserName" };
+    if (mainUserName === userName) return { ok: false, error: "main account must be another user" };
+    if (findUserRow_(mainUserName) < 0) return { ok: false, error: "main user not found" };
+  } else {
+    mainUserName = "";
+  }
+
+  const sheet = getAccountInfoSheet_();
+  let row = findAccountInfoRow_(sheet, userName);
+  if (row < 0) row = Math.max(2, sheet.getLastRow() + 1);
+  sheet.getRange(row, 1, 1, 3).setValues([[
+    userName,
+    accountType === "main" ? "メイン" : "サブ",
+    mainUserName,
+  ]]);
+
+  return {
+    ok: true,
+    userName: userName,
+    accountType: accountType,
+    mainUserName: mainUserName,
+  };
+}
+
+function exportAccountInfo_() {
+  const sheet = SpreadsheetApp.openById(LOG_SPREADSHEET_ID).getSheetByName(SHEET_ACCOUNT_INFO);
+  if (!sheet || sheet.getLastRow() < 2) return {};
+  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getDisplayValues();
+  const result = {};
+
+  values.forEach(function (row) {
+    const userName = String(row[0] || "").trim();
+    const typeLabel = String(row[1] || "").trim();
+    if (!userName || (typeLabel !== "メイン" && typeLabel !== "サブ")) return;
+    result[userName] = {
+      accountType: typeLabel === "メイン" ? "main" : "sub",
+      mainUserName: typeLabel === "サブ" ? String(row[2] || "").trim() : "",
+    };
+  });
+
+  return result;
+}
+
+function clearAccountInfoUser_(userName) {
+  const sheet = SpreadsheetApp.openById(LOG_SPREADSHEET_ID).getSheetByName(SHEET_ACCOUNT_INFO);
+  if (!sheet) return;
+  const row = findAccountInfoRow_(sheet, userName);
+  if (row > 0) sheet.getRange(row, 1, 1, 3).clearContent();
+}
+
 function deleteUser_(userName) {
   if (!userName) return { ok: false, error: "empty userName" };
 
@@ -740,6 +827,7 @@ function deleteUser_(userName) {
   });
 
   clearTopAuthUser_(userName);
+  clearAccountInfoUser_(userName);
 
   return { ok: true, deletedRow: row };
 }
@@ -761,6 +849,7 @@ function export_() {
   const seriesPointsByUser = {};
   const unusedPointsByUser = {};
   const topAuthByUser = exportTopAuth_();
+  const accountInfoByUser = exportAccountInfo_();
 
   for (let r = 0; r < numUsers; r++) {
     const row = values[r];
@@ -802,6 +891,7 @@ function export_() {
     seriesPointsByUser: seriesPointsByUser,
     unusedPointsByUser: unusedPointsByUser,
     topAuthByUser: topAuthByUser,
+    accountInfoByUser: accountInfoByUser,
   };
 }
 
