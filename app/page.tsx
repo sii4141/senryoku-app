@@ -306,6 +306,7 @@ export default function Home() {
   const [historyStatus, setHistoryStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [expandedOwnershipClasses, setExpandedOwnershipClasses] = useState<Partial<Record<OwnershipClass, boolean>>>({});
   const [expandedModuleGroups, setExpandedModuleGroups] = useState<Partial<Record<string, boolean>>>({});
+  const [expandedAccountGroups, setExpandedAccountGroups] = useState<Record<string, boolean>>({});
   const refSeriesBox = useRef<HTMLDivElement | null>(null);
   const refUnusedBox = useRef<HTMLDivElement | null>(null);
   const refOwnedBox = useRef<HTMLDivElement | null>(null);
@@ -887,6 +888,14 @@ export default function Home() {
     );
   }, [mainUserNames, subUserNamesByMain, userQuery]);
 
+  useEffect(() => {
+    if (!selectedMainUser || selectedUser === selectedMainUser) return;
+    if (!(subUserNamesByMain[selectedMainUser] || []).includes(selectedUser)) return;
+    setExpandedAccountGroups((previous) =>
+      previous[selectedMainUser] ? previous : { ...previous, [selectedMainUser]: true }
+    );
+  }, [selectedUser, selectedMainUser, subUserNamesByMain]);
+
   const ownedList: OwnedItem[] = useMemo(() => {
     if (!selectedUser) return [];
     return users[selectedUser] || [];
@@ -1106,6 +1115,10 @@ export default function Home() {
       }
       if (!Object.prototype.hasOwnProperty.call(users, mainUserName)) {
         alert("登録済みユーザーからメインアカウントを選択してください");
+        return;
+      }
+      if (accountInfoByUser[mainUserName]?.accountType === "sub") {
+        alert("サブアカウントはメインアカウントに指定できません");
         return;
       }
     }
@@ -2038,24 +2051,6 @@ export default function Home() {
               ))}
           </datalist>
 
-          {selectedMainUser && (subUserNamesByMain[selectedMainUser] || []).length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <label style={{ display: "block", marginBottom: 5, fontSize: 12, color: "#374151", fontWeight: 700 }}>
-                {selectedMainUser} のアカウントを選択
-              </label>
-              <select
-                value={selectedUser}
-                onChange={(event) => setSelectedUser(event.target.value)}
-                style={{ width: "100%", padding: 10, border: "1px solid #cbd5e1", borderRadius: 8 }}
-              >
-                <option value={selectedMainUser}>{selectedMainUser}（メイン）</option>
-                {(subUserNamesByMain[selectedMainUser] || []).map((subName) => (
-                  <option value={subName} key={subName}>{subName}（サブ）</option>
-                ))}
-              </select>
-            </div>
-          )}
-
           <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
             ユーザー数：{Object.keys(users || {}).length}人（メイン・未分類：{mainUserNames.length}人）
           </div>
@@ -2065,7 +2060,7 @@ export default function Home() {
             {filteredUserNames.map((name) => {
               const subNames = subUserNamesByMain[name] || [];
               const active = name === selectedMainUser;
-              const selectedInGroup = active ? selectedUser : name;
+              const expanded = Boolean(expandedAccountGroups[name]);
               return (
                 <div
                   key={name}
@@ -2073,66 +2068,113 @@ export default function Home() {
                   style={{
                     border: active ? "2px solid #2563eb" : "1px solid #d1d5db",
                     borderRadius: 10,
-                    padding: 8,
+                    padding: 0,
                     background: active ? "#eff6ff" : "white",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 8,
-                    alignItems: "center",
                     minWidth: 0,
                     boxSizing: "border-box",
+                    overflow: "hidden",
                   }}
                 >
-                  <button
-                    onClick={() => {
-                      setSelectedUser(name);
-                      setUserQuery(name);
-                    }}
-                    style={{
-                      flex: 1,
-                      textAlign: "left",
-                      background: "transparent",
-                      border: "none",
-                      cursor: "pointer",
-                      color: "#111827",
-                      fontWeight: active ? "bold" : "normal",
-                      minWidth: 0,
-                      overflowWrap: "anywhere",
-                    }}
-                  >
-                    {name}
-                  </button>
-                  {subNames.length > 0 && (
-                    <select
-                      aria-label={`${name}のサブアカウントを選択`}
-                      value={active ? selectedUser : name}
-                      onChange={(event) => {
-                        setSelectedUser(event.target.value);
-                        setUserQuery(name);
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 8 }}>
+                    <button
+                      type="button"
+                      aria-expanded={subNames.length > 0 ? expanded : undefined}
+                      onClick={() => {
+                        setSelectedUser(name);
+                        if (subNames.length > 0) {
+                          setExpandedAccountGroups((previous) => ({
+                            ...previous,
+                            [name]: !previous[name],
+                          }));
+                        }
                       }}
-                      style={{ minWidth: 0, maxWidth: 170, padding: "6px 5px", border: "1px solid #cbd5e1", borderRadius: 8 }}
+                      style={{
+                        flex: 1,
+                        padding: "7px 4px",
+                        textAlign: "left",
+                        background: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "#111827",
+                        fontWeight: active ? "bold" : "normal",
+                        minWidth: 0,
+                        overflowWrap: "anywhere",
+                      }}
                     >
-                      <option value={name}>メイン</option>
-                      {subNames.map((subName) => (
-                        <option value={subName} key={subName}>{subName}</option>
-                      ))}
-                    </select>
+                      <span aria-hidden="true">{subNames.length > 0 ? (expanded ? "▼" : "▶") : "•"}</span>{" "}
+                      {name}
+                    </button>
+                    <Link
+                      href={`/user/${encodeURIComponent(name)}`}
+                      style={{
+                        padding: "6px 9px",
+                        borderRadius: 8,
+                        background: "#2563eb",
+                        color: "white",
+                        textDecoration: "none",
+                        fontSize: 12,
+                        fontWeight: "bold",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      詳細
+                    </Link>
+                  </div>
+                  {subNames.length > 0 && expanded && (
+                    <div style={{ padding: "0 8px 8px", display: "grid", gap: 5 }}>
+                      {subNames.map((subName) => {
+                        const subActive = selectedUser === subName;
+                        return (
+                          <div
+                            key={subName}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              padding: 6,
+                              border: subActive ? "1px solid #7c3aed" : "1px solid #d8dee8",
+                              borderRadius: 8,
+                              background: subActive ? "#ede9fe" : "rgba(255,255,255,0.8)",
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setSelectedUser(subName)}
+                              style={{
+                                flex: 1,
+                                minWidth: 0,
+                                padding: "5px 4px",
+                                border: 0,
+                                background: "transparent",
+                                color: "#111827",
+                                textAlign: "left",
+                                fontWeight: subActive ? 800 : 600,
+                                cursor: "pointer",
+                                overflowWrap: "anywhere",
+                              }}
+                            >
+                              └ {subName}
+                            </button>
+                            <Link
+                              href={`/user/${encodeURIComponent(subName)}`}
+                              style={{
+                                padding: "5px 8px",
+                                borderRadius: 7,
+                                background: "#7c3aed",
+                                color: "white",
+                                textDecoration: "none",
+                                fontSize: 11,
+                                fontWeight: "bold",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              詳細
+                            </Link>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
-                  <Link
-                    href={`/user/${encodeURIComponent(selectedInGroup)}`}
-                    style={{
-                      padding: "6px 9px",
-                      borderRadius: 8,
-                      background: "#2563eb",
-                      color: "white",
-                      textDecoration: "none",
-                      fontSize: 12,
-                      fontWeight: "bold",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    詳細
-                  </Link>
                 </div>
               );
             })}
@@ -2231,9 +2273,8 @@ export default function Home() {
                   style={{ flex: 1, minWidth: 0 }}
                 >
                   <option value="">選択してください</option>
-                  {Object.keys(users)
+                  {mainUserNames
                     .filter((userName) => userName !== selectedUser)
-                    .sort((a, b) => a.localeCompare(b, "ja"))
                     .map((userName) => <option value={userName} key={userName}>{userName}</option>)}
                 </select>
                 <button
@@ -2675,7 +2716,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.351
+        v1.352
 </div>
 
       <style jsx>{`
