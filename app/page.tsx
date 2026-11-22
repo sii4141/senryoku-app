@@ -849,13 +849,43 @@ export default function Home() {
     return points;
   }, [unusedPoints, unusedDraftByUser, selectedUser]);
 
-  // ✅ 表示用ユーザー一覧（検索反映）
+  const mainUserNames = useMemo(() => {
+    return Object.keys(users || {})
+      .filter((name) => {
+        const info = accountInfoByUser[name];
+        return info?.accountType !== "sub" || !info.mainUserName || !users[info.mainUserName];
+      })
+      .sort((a, b) => a.localeCompare(b, "ja"));
+  }, [users, accountInfoByUser]);
+
+  const subUserNamesByMain = useMemo(() => {
+    const groups: Record<string, string[]> = {};
+    Object.keys(users || {}).forEach((name) => {
+      const info = accountInfoByUser[name];
+      if (info?.accountType !== "sub" || !info.mainUserName || !users[info.mainUserName]) return;
+      if (!groups[info.mainUserName]) groups[info.mainUserName] = [];
+      groups[info.mainUserName].push(name);
+    });
+    Object.values(groups).forEach((names) => names.sort((a, b) => a.localeCompare(b, "ja")));
+    return groups;
+  }, [users, accountInfoByUser]);
+
+  const selectedMainUser = useMemo(() => {
+    if (!selectedUser) return "";
+    const info = accountInfoByUser[selectedUser];
+    return info?.accountType === "sub" && users[info.mainUserName]
+      ? info.mainUserName
+      : selectedUser;
+  }, [selectedUser, users, accountInfoByUser]);
+
+  // ✅ 表示用メインアカウント一覧（サブ名で検索した場合も親を表示）
   const filteredUserNames: string[] = useMemo(() => {
-    const names = Object.keys(users || {}).sort((a, b) => a.localeCompare(b, "ja"));
     const q = userQuery.trim();
-    if (!q) return names;
-    return names.filter((n) => n.includes(q));
-  }, [users, userQuery]);
+    if (!q) return mainUserNames;
+    return mainUserNames.filter((name) =>
+      name.includes(q) || (subUserNamesByMain[name] || []).some((subName) => subName.includes(q))
+    );
+  }, [mainUserNames, subUserNamesByMain, userQuery]);
 
   const ownedList: OwnedItem[] = useMemo(() => {
     if (!selectedUser) return [];
@@ -1067,7 +1097,7 @@ export default function Home() {
 
     if (accountType === "sub") {
       if (!mainUserName) {
-        alert("メインアカウントを入力してください");
+        alert("メインアカウントを選択してください");
         return;
       }
       if (mainUserName === selectedUser) {
@@ -1075,7 +1105,7 @@ export default function Home() {
         return;
       }
       if (!Object.prototype.hasOwnProperty.call(users, mainUserName)) {
-        alert("登録済みのユーザー名をメインアカウントとして入力してください");
+        alert("登録済みユーザーからメインアカウントを選択してください");
         return;
       }
     }
@@ -1984,7 +2014,7 @@ export default function Home() {
               onClick={() => {
                 const q = userQuery.trim();
                 if (!q) return;
-                const hit = Object.keys(users || {}).find((n) => n === q) || "";
+                const hit = mainUserNames.find((name) => name === q) || "";
                 if (hit) setSelectedUser(hit);
               }}
               style={{
@@ -2003,19 +2033,39 @@ export default function Home() {
           </div>
 
           <datalist id="userList">
-            {Object.keys(users || {})
-              .sort((a, b) => a.localeCompare(b, "ja"))
-              .map((name) => (
+            {mainUserNames.map((name) => (
                 <option key={name} value={name} />
               ))}
           </datalist>
 
-          <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>ユーザー数：{Object.keys(users || {}).length}人</div>
+          {selectedMainUser && (subUserNamesByMain[selectedMainUser] || []).length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <label style={{ display: "block", marginBottom: 5, fontSize: 12, color: "#374151", fontWeight: 700 }}>
+                {selectedMainUser} のアカウントを選択
+              </label>
+              <select
+                value={selectedUser}
+                onChange={(event) => setSelectedUser(event.target.value)}
+                style={{ width: "100%", padding: 10, border: "1px solid #cbd5e1", borderRadius: 8 }}
+              >
+                <option value={selectedMainUser}>{selectedMainUser}（メイン）</option>
+                {(subUserNamesByMain[selectedMainUser] || []).map((subName) => (
+                  <option value={subName} key={subName}>{subName}（サブ）</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
+            ユーザー数：{Object.keys(users || {}).length}人（メイン・未分類：{mainUserNames.length}人）
+          </div>
 
           {/* 一覧（削除ボタン付き） */}
           <div className="user-grid" style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
             {filteredUserNames.map((name) => {
-              const active = name === selectedUser;
+              const subNames = subUserNamesByMain[name] || [];
+              const active = name === selectedMainUser;
+              const selectedInGroup = active ? selectedUser : name;
               return (
                 <div
                   key={name}
@@ -2034,7 +2084,10 @@ export default function Home() {
                   }}
                 >
                   <button
-                    onClick={() => setSelectedUser(name)}
+                    onClick={() => {
+                      setSelectedUser(name);
+                      setUserQuery(name);
+                    }}
                     style={{
                       flex: 1,
                       textAlign: "left",
@@ -2049,8 +2102,24 @@ export default function Home() {
                   >
                     {name}
                   </button>
+                  {subNames.length > 0 && (
+                    <select
+                      aria-label={`${name}のサブアカウントを選択`}
+                      value={active ? selectedUser : name}
+                      onChange={(event) => {
+                        setSelectedUser(event.target.value);
+                        setUserQuery(name);
+                      }}
+                      style={{ minWidth: 0, maxWidth: 170, padding: "6px 5px", border: "1px solid #cbd5e1", borderRadius: 8 }}
+                    >
+                      <option value={name}>メイン</option>
+                      {subNames.map((subName) => (
+                        <option value={subName} key={subName}>{subName}</option>
+                      ))}
+                    </select>
+                  )}
                   <Link
-                    href={`/user/${encodeURIComponent(name)}`}
+                    href={`/user/${encodeURIComponent(selectedInGroup)}`}
                     style={{
                       padding: "6px 9px",
                       borderRadius: 8,
@@ -2150,25 +2219,23 @@ export default function Home() {
           {selectedUser && accountTypeDraft === "sub" && (
             <div style={{ marginTop: 10 }}>
               <label style={{ display: "block", marginBottom: 5, fontSize: 12, fontWeight: 700 }}>
-                メインアカウントのユーザー名
+                メインアカウントを選択
               </label>
               <div style={{ display: "flex", gap: 8 }}>
-                <input
+                <select
                   value={mainAccountDraft}
-                  list="main-account-users"
                   onChange={(event) => {
                     setMainAccountDraft(event.target.value);
                     setAccountSaveStatus("idle");
                   }}
-                  placeholder="登録済みユーザー名を入力"
                   style={{ flex: 1, minWidth: 0 }}
-                />
-                <datalist id="main-account-users">
+                >
+                  <option value="">選択してください</option>
                   {Object.keys(users)
                     .filter((userName) => userName !== selectedUser)
                     .sort((a, b) => a.localeCompare(b, "ja"))
-                    .map((userName) => <option value={userName} key={userName} />)}
-                </datalist>
+                    .map((userName) => <option value={userName} key={userName}>{userName}</option>)}
+                </select>
                 <button
                   type="button"
                   disabled={accountSaveStatus === "saving"}
@@ -2608,7 +2675,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.35
+        v1.351
 </div>
 
       <style jsx>{`
