@@ -11,19 +11,20 @@ const USER_ROW_END = 149;
 const MASTER_NAME_COL = 19; // S
 const MASTER_KEY_COL = 20;  // T
 
-const UNUSED_PT_COL = {
-  "フリゲート": "PR",
-  "駆逐艦": "PS",
-  "巡洋艦": "PT",
-  "戦闘機": "PU",
-  "護送艦": "PV",
-  "巡洋戦艦": "PW",
-  "航空母艦": "PX",
-  "支援艦": "PY",
-  "戦艦": "PZ",
+// 未使用Pt列は列記号ではなく、所持設計図シート2行目の見出しとの完全一致で検索する。
+const UNUSED_CLASS_HEADER = {
+  "フリゲート": "フリゲ",
+  "駆逐艦": "駆逐艦",
+  "巡洋艦": "巡洋艦",
+  "戦闘機": "戦闘機",
+  "護送艦": "護送艦",
+  "巡洋戦艦": "巡戦",
+  "航空母艦": "空母",
+  "支援艦": "支援艦",
+  "戦艦": "戦艦",
 };
 
-const UNUSED_CLASSES = Object.keys(UNUSED_PT_COL);
+const UNUSED_CLASSES = Object.keys(UNUSED_CLASS_HEADER);
 const LOG_SPREADSHEET_ID = "14eiFaTJHMedvz0N08Nz00n4-k30iPoiWIgkNZyXb7IY";
 const LOG_SHEET_NAME = "操作ログ";
 
@@ -429,18 +430,44 @@ function upsertPt_(userName, series, pt) {
   return { ok: true, row: row, colLetter: colLetter, pt: parsed, cleared: false };
 }
 
+function findUnusedPtColumns_(sheet) {
+  const lastCol = sheet.getLastColumn();
+  if (lastCol < 1) return {};
+  const headers = sheet.getRange(2, 1, 1, lastCol).getDisplayValues()[0];
+  const columns = {};
+
+  UNUSED_CLASSES.forEach(function (cls) {
+    const expectedHeader = UNUSED_CLASS_HEADER[cls];
+    for (let index = 0; index < headers.length; index++) {
+      if (String(headers[index] || "") === expectedHeader) {
+        columns[cls] = index + 1;
+        break;
+      }
+    }
+  });
+
+  return columns;
+}
+
+function findUnusedPtColumn_(sheet, cls) {
+  return findUnusedPtColumns_(sheet)[cls] || 0;
+}
+
 function upsertUnusedPt_(userName, cls, pt) {
   if (!userName || !cls) {
     return { ok: false, error: "missing userName or cls" };
   }
 
-  const colLetter = UNUSED_PT_COL[cls];
-  if (!colLetter) {
+  if (!Object.prototype.hasOwnProperty.call(UNUSED_CLASS_HEADER, cls)) {
     return { ok: false, error: "unknown cls", cls: cls };
   }
 
+  const sheet = getOwnedSheet_();
+  const col = findUnusedPtColumn_(sheet, cls);
+  if (!col) return { ok: false, error: "unused pt header not found in row 2", cls: cls };
+  const colLetter = columnToLetter_(col);
   const row = ensureUserRow_(userName);
-  const cell = getOwnedSheet_().getRange(row, letterToColumn_(colLetter));
+  const cell = sheet.getRange(row, col);
   const parsed = parseNullablePoint_(pt);
 
   if (parsed === null) {
@@ -462,6 +489,7 @@ function batchUpsertPoints_(changes) {
   }
 
   const sheet = getOwnedSheet_();
+  const unusedPtColumns = findUnusedPtColumns_(sheet);
   const masterEntries = getMasterEntries_();
   const masterByName = {};
   masterEntries.forEach(function (entry) {
@@ -508,9 +536,9 @@ function batchUpsertPoints_(changes) {
       }
     } else if (kind === "unused") {
       targetName = String(change.cls || "").trim();
-      colLetter = UNUSED_PT_COL[targetName] || "";
+      colLetter = unusedPtColumns[targetName] ? columnToLetter_(unusedPtColumns[targetName]) : "";
       if (!targetName || !colLetter) {
-        errors.push({ ok: false, error: "unknown cls", cls: targetName });
+        errors.push({ ok: false, error: "unused pt header not found in row 2", cls: targetName });
         return;
       }
     } else {
@@ -826,8 +854,10 @@ function deleteUser_(userName) {
     }
   });
 
+  const unusedPtColumns = findUnusedPtColumns_(sh);
   UNUSED_CLASSES.forEach(function (cls) {
-    sh.getRange(row, letterToColumn_(UNUSED_PT_COL[cls])).clearContent();
+    const col = unusedPtColumns[cls];
+    if (col) sh.getRange(row, col).clearContent();
   });
 
   clearTopAuthUser_(userName);
@@ -854,6 +884,7 @@ function export_() {
   const unusedPointsByUser = {};
   const topAuthByUser = exportTopAuth_();
   const accountInfoByUser = exportAccountInfo_();
+  const unusedPtColumns = findUnusedPtColumns_(sh);
 
   for (let r = 0; r < numUsers; r++) {
     const row = values[r];
@@ -865,8 +896,8 @@ function export_() {
     unusedPointsByUser[userName] = {};
 
     UNUSED_CLASSES.forEach(function (cls) {
-      const col = letterToColumn_(UNUSED_PT_COL[cls]);
-      unusedPointsByUser[userName][cls] = toNumberOrZero_(row[col - 1]);
+      const col = unusedPtColumns[cls];
+      unusedPointsByUser[userName][cls] = col ? toNumberOrZero_(row[col - 1]) : 0;
     });
 
     for (let col = 4; col <= lastCol; col++) {
@@ -1044,6 +1075,18 @@ function letterToColumn_(letter) {
     col = col * 26 + value.charCodeAt(i) - 64;
   }
   return col;
+}
+
+function columnToLetter_(column) {
+  let value = Math.floor(Number(column));
+  if (!Number.isFinite(value) || value < 1) return "";
+  let letter = "";
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    letter = String.fromCharCode(65 + remainder) + letter;
+    value = Math.floor((value - 1) / 26);
+  }
+  return letter;
 }
 
 function jsonOut_(obj) {
