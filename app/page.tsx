@@ -1105,6 +1105,12 @@ export default function Home() {
     const mainUserName = accountType === "sub" ? mainAccountDraft.trim() : "";
 
     if (accountType === "sub") {
+      if (Object.values(accountInfoByUser).some((info) =>
+        info.accountType === "sub" && info.mainUserName === selectedUser
+      )) {
+        alert("紐づいているサブアカウントがあります。先にすべての紐づけを外してから変更してください。");
+        return;
+      }
       if (!mainUserName) {
         alert("メインアカウントを選択してください");
         return;
@@ -1141,7 +1147,7 @@ export default function Home() {
     } catch (error) {
       console.error("アカウント情報の保存に失敗:", error);
       setAccountSaveStatus("error");
-      alert("アカウント情報を保存できませんでした");
+      alert(error instanceof Error ? error.message : "アカウント情報を保存できませんでした");
     }
   }
 
@@ -2241,6 +2247,12 @@ export default function Home() {
               type="button"
               disabled={!selectedUser || accountSaveStatus === "saving"}
               onClick={() => {
+                if (Object.values(accountInfoByUser).some((info) =>
+                  info.accountType === "sub" && info.mainUserName === selectedUser
+                )) {
+                  alert("紐づいているサブアカウントがあります。先にすべての紐づけを外してから変更してください。");
+                  return;
+                }
                 setAccountTypeDraft("sub");
                 setAccountSaveStatus("idle");
               }}
@@ -2716,7 +2728,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.353
+        v1.354
 </div>
 
       <style jsx>{`

@@ -780,6 +780,11 @@ function upsertAccountInfo_(userName, accountType, mainUserName) {
     if (mainUserName === userName) return { ok: false, error: "main account must be another user" };
     if (findUserRow_(mainUserName) < 0) return { ok: false, error: "main user not found" };
     const accountInfo = exportAccountInfo_();
+    if (Object.keys(accountInfo).some(function (name) {
+      return accountInfo[name].accountType === "sub" && accountInfo[name].mainUserName === userName;
+    })) {
+      return { ok: false, error: "紐づいているサブアカウントがあります。先にすべての紐づけを外してから変更してください。" };
+    }
     if (accountInfo[mainUserName] && accountInfo[mainUserName].accountType === "sub") {
       return { ok: false, error: "sub account cannot be selected as main" };
     }
