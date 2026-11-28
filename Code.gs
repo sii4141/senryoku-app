@@ -837,9 +837,10 @@ function clearAccountInfoUser_(userName) {
 
 function deleteUserWithLog_(body) {
   const userName = String(body.userName || "").trim();
+  const progress = { row: null, completed: "なし", stage: "入力確認" };
   let result;
   try {
-    result = deleteUser_(userName);
+    result = deleteUser_(userName, progress);
   } catch (error) {
     result = { ok: false, error: "削除処理を完了できませんでした。一部変更されている可能性があります。詳細: " + String(error) };
   }
@@ -848,7 +849,12 @@ function deleteUserWithLog_(body) {
       timestamp: body.timestamp || Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy/MM/dd HH:mm:ss"),
       userName: userName,
       operation: result.ok ? "ユーザー削除（成功）" : "ユーザー削除（失敗）",
-      detail: result.ok ? userName + " を削除" : result.error,
+      detail: [
+        result.ok ? userName + " を削除" : result.error,
+        "対象行: " + (progress.row || "未特定"),
+        "最後に完了した工程: " + progress.completed,
+        "失敗した工程: " + (result.ok ? "なし" : progress.stage),
+      ].join(" / "),
       page: "home",
       userAgent: body.userAgent || "",
     });
@@ -860,18 +866,36 @@ function deleteUserWithLog_(body) {
   return result;
 }
 
-function deleteUser_(userName) {
+function deleteUser_(userName, progress) {
+  function start(stage) {
+    progress.stage = stage;
+  }
+  function done() {
+    progress.completed = progress.stage;
+  }
   if (!userName) return { ok: false, error: "empty userName" };
+  done();
 
+  start("ユーザー行の検索");
   const row = findUserRow_(userName);
   if (row < 0) return { ok: false, error: "user not found" };
+  progress.row = row;
+  done();
 
+  start("所持設計図シートの取得");
   const sh = getOwnedSheet_();
+  done();
+  start("マスターデータの取得");
   const master = getMasterEntries_();
+  done();
 
+  start("ユーザー名の消去");
   sh.getRange(row, USER_COL).clearContent();
+  SpreadsheetApp.flush();
+  done();
 
   // マスターにある列のみ初期化する。2行目がPtの列は空欄、モデル列は「-」。
+  start("所持データ・技術Ptの初期化");
   master.forEach(function (entry) {
     const col = letterToColumn_(entry.colLetter);
     if (col < 4 || col > sh.getLastColumn()) return;
@@ -884,14 +908,25 @@ function deleteUser_(userName) {
     }
   });
 
+  SpreadsheetApp.flush();
+  done();
+  start("未使用Ptの列検索・消去");
   const unusedPtColumns = findUnusedPtColumns_(sh);
   UNUSED_CLASSES.forEach(function (cls) {
     const col = unusedPtColumns[cls];
     if (col) sh.getRange(row, col).clearContent();
   });
 
+  SpreadsheetApp.flush();
+  done();
+  start("TOP認証の消去");
   clearTopAuthUser_(userName);
+  SpreadsheetApp.flush();
+  done();
+  start("アカウント情報の消去");
   clearAccountInfoUser_(userName);
+  SpreadsheetApp.flush();
+  done();
 
   return { ok: true, deletedRow: row };
 }
