@@ -503,6 +503,7 @@ export default function Home() {
     return await gasPost({
       action: "deleteUser",
       userName,
+      userAgent: navigator.userAgent,
     });
   }
 
@@ -1059,6 +1060,21 @@ export default function Home() {
   async function deleteUser(userName: string) {
     const n = userName.trim();
     if (!n) return;
+    if (
+      ownershipSavingRef.current || pointSavingRef.current ||
+      [...pendingOwnershipRef.current.values(), ...pendingPointRef.current.values(), ...pendingTopAuthRef.current.values()]
+        .some((change) => change.userName === n)
+    ) {
+      alert("保存待ち・保存中の変更があります。保存が終わってから削除してください。");
+      return;
+    }
+    try {
+      const result = await apiDeleteUser(n);
+      if (result.logSaved === false) alert("ユーザーは削除されましたが、操作ログを保存できませんでした。");
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "削除結果を確認できませんでした。");
+      return;
+    }
 
     setUsers((prev) => {
       const next = { ...prev };
@@ -1090,14 +1106,7 @@ export default function Home() {
       return next;
     });
 
-    if (selectedUser === n) setSelectedUser("");
-
-    try {
-      await apiDeleteUser(n);
-      await apiWriteLog(n, "ユーザー削除", `${n} を削除`);
-    } catch (e) {
-      console.error("deleteUser failed:", e);
-    }
+    setSelectedUser((current) => current === n ? "" : current);
   }
 
   async function saveAccountInfo(accountType: "main" | "sub") {
@@ -2728,7 +2737,7 @@ export default function Home() {
           whiteSpace: "nowrap",
         }}
       >
-        v1.354
+        v1.355
 </div>
 
       <style jsx>{`

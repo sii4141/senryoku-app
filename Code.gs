@@ -57,7 +57,7 @@ function doPost(e) {
     }
 
     if (action === "deleteUser") {
-      return jsonOut_(deleteUser_(String(body.userName || "").trim()));
+      return jsonOut_(deleteUserWithLog_(body));
     }
 
     if (action === "upsertAccountInfo") {
@@ -833,6 +833,31 @@ function clearAccountInfoUser_(userName) {
   if (!sheet) return;
   const row = findAccountInfoRow_(sheet, userName);
   if (row > 0) sheet.getRange(row, 1, 1, 3).clearContent();
+}
+
+function deleteUserWithLog_(body) {
+  const userName = String(body.userName || "").trim();
+  let result;
+  try {
+    result = deleteUser_(userName);
+  } catch (error) {
+    result = { ok: false, error: "削除処理を完了できませんでした。一部変更されている可能性があります。詳細: " + String(error) };
+  }
+  try {
+    logAction_({
+      timestamp: body.timestamp || Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy/MM/dd HH:mm:ss"),
+      userName: userName,
+      operation: result.ok ? "ユーザー削除（成功）" : "ユーザー削除（失敗）",
+      detail: result.ok ? userName + " を削除" : result.error,
+      page: "home",
+      userAgent: body.userAgent || "",
+    });
+  } catch (error) {
+    console.error("削除ログの保存に失敗:", error);
+    result.logSaved = false;
+    if (!result.ok) result.error += "（操作ログも保存できませんでした）";
+  }
+  return result;
 }
 
 function deleteUser_(userName) {
